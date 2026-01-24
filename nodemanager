@@ -1,0 +1,13 @@
+#!/bin/bash
+# Minima Node Manager Launcher
+# This script starts the Node Manager application with sudo privileges
+
+# Resolve the real path of this script (follows symlinks)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+# Change to the script directory
+cd "$SCRIPT_DIR"
+
+# Start the server with sudo
+sudo $(which node) server.js

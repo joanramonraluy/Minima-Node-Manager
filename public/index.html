@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minima Node Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:;base64,iVB0w0KGgo=">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Horizontal Top Navigation -->
+        <header class="topbar">
+            <div class="topbar-header">
+                <img src="logo.jpeg" alt="Minima Logo" class="logo" onerror="this.style.display='none'">
+                <h1>Node Manager</h1>
+            </div>
+
+            <nav class="topbar-nav">
+                <button class="topbar-link active" onclick="openTab(event, 'tab-nodes')">
+                    <span class="icon">🖥️</span> Nodes
+                </button>
+                <button class="topbar-link" onclick="openTab(event, 'tab-dapps')">
+                    <span class="icon">📦</span> dApp Manager
+                </button>
+                <button class="topbar-link" onclick="openTab(event, 'tab-build')">
+                    <span class="icon">🛠️</span> Build & Zip
+                </button>
+                <button class="topbar-link" onclick="openTab(event, 'tab-vite')">
+                    <span class="icon">⚡</span> Vite Server
+                </button>
+            </nav>
+
+            <div class="topbar-footer">
+                <small>v1.0.0</small>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+
+            <!-- Tab Content: Nodes -->
+            <div id="tab-nodes" class="tab-content show active">
+                <div class="tab-toolbar">
+                    <button id="start-all-btn" class="btn btn-primary">Start All</button>
+                    <button id="stop-all-btn" class="btn btn-danger">Stop All</button>
+                    <button id="add-node-btn" class="btn btn-secondary">Add Node</button>
+                    <button id="toggle-view-btn" class="btn btn-neutral">Toggle View</button>
+                    <button id="kill-all-btn" class="btn btn-danger">Kill All (Force)</button>
+                </div>
+
+                <div class="nodes-scroll-area">
+                    <div class="inline-log-container">
+                        <div class="log-header">Global System Log</div>
+                        <div id="system-log" class="global-log-instance"></div>
+                    </div>
+
+                    <div class="grid list-view">
+                        <!-- Node Templates Generated via JS to avoid duplication -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Vite -->
+            <div id="tab-vite" class="tab-content">
+                <div class="control-panel">
+                    <h3>Project Configuration</h3>
+                    <div class="form-row">
+                        <label for="config-project-path">Project Root Path (Vite & Build):</label>
+                        <div class="input-group">
+                            <input type="text" id="config-project-path" value="/home/joanramon/Minima/metachain"
+                                class="command-input">
+                            <button class="btn btn-neutral browse-btn" data-target="config-project-path"
+                                data-type="dir">Browse...</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label for="config-dapp-name">Dapp Name (for UID lookup):</label>
+                        <div class="input-group">
+                            <input type="text" id="config-dapp-name" value="MetaChain" class="command-input"
+                                list="dapp-name-list">
+                            <datalist id="dapp-name-list"></datalist>
+                            <button id="refresh-config-dapps-btn" class="btn btn-neutral" title="Fetch Names">↻</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label for="config-env-path">Target .env Path:</label>
+                        <div class="input-group">
+                            <input type="text" id="config-env-path" value="/home/joanramon/Minima/metachain/.env"
+                                class="command-input" style="width: 100%;">
+                            <button class="btn btn-neutral browse-btn" data-target="config-env-path"
+                                data-type="file">Browse...</button>
+                        </div>
+                    </div>
+                    <div style="text-align: right; margin-top: 10px;">
+                        <button id="save-config-btn" class="btn btn-primary">Save Config</button>
+                    </div>
+                </div>
+
+                <div class="control-panel" style="margin-top: 20px;">
+                    <h3>Export Configuration (.env)</h3>
+                    <div class="form-row">
+                        <label>Select Target Node:</label>
+                        <div class="input-group">
+                            <select id="export-node-select" class="command-input">
+                                <option value="">-- Select a Running Node --</option>
+                            </select>
+                            <button id="export-env-btn" class="btn btn-secondary">Export
+                                .env</button>
+                        </div>
+                    </div>
+                    <p class="description" style="color: #888; font-size: 0.9rem; margin-top: 5px;">
+                        Exports <code>.env</code> file to the configured Target Path with connection details for the
+                        selected node.
+                    </p>
+                </div>
+
+                <div class="control-panel" style="margin-top: 20px;">
+                    <h3>Vite Development Server</h3>
+                    <div class="button-group">
+                        <button id="start-vite-btn" class="btn btn-primary">Start Vite Server</button>
+                        <button id="stop-vite-btn" class="btn btn-danger" disabled>Stop Vite</button>
+                        <button id="open-app-btn" class="btn btn-secondary" style="display:none;">Open App ↗</button>
+                    </div>
+                    <!-- Log moved inside control panel -->
+                    <div class="inline-log-container" style="margin-top: 20px;">
+                        <div class="log-header">Vite Server Output</div>
+                        <div id="vite-log" class="global-log-instance" style="height: 300px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: dApp Manager -->
+            <div id="tab-dapps" class="tab-content">
+                <div class="control-panel">
+                    <h3>Batch dApp Management</h3>
+
+                    <div class="form-row"
+                        style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 20px;">
+                        <label>dApp Build Location (Output file):</label>
+                        <div class="input-group">
+                            <input type="text" id="dapp-location-config" class="command-input"
+                                value="/home/joanramon/Minima/metachain/build/dapp.minidapp">
+                            <button class="btn btn-neutral browse-btn" data-target="dapp-location-config"
+                                data-type="file">Browse...</button>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Install New / Update Existing:</label>
+                        <div class="input-group">
+                            <button id="batch-install-btn" class="btn btn-primary" style="flex:1;">Install from
+                                Location</button>
+                            <button id="batch-update-btn" class="btn btn-secondary" style="flex:1;">Update from
+                                Location</button>
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #444;">
+                        <label>Uninstall:</label>
+                        <div class="input-group">
+                            <select id="dapp-select" class="command-input" style="flex: 2;">
+                                <option value="">-- Select dApp to Uninstall --</option>
+                            </select>
+                            <button id="refresh-dapps-btn" class="btn btn-neutral" title="Refresh List">↻</button>
+                            <button id="batch-uninstall-btn" class="btn btn-danger">Uninstall Selected</button>
+                        </div>
+                    </div>
+                    <!-- Log moved inside control panel -->
+                    <div class="inline-log-container" style="margin-top: 20px;">
+                        <div class="log-header">dApp Operations Log</div>
+                        <div id="dapp-log" class="global-log-instance" style="height: 300px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Build & Zip -->
+            <div id="tab-build" class="tab-content">
+                <div class="control-panel">
+                    <h3>Build & Zip dApp</h3>
+                    <div class="form-row">
+                        <label>Build Workspace:</label>
+                        <div class="input-group">
+                            <input type="text" id="build-workspace-path" class="command-input" readonly>
+                            <button class="btn btn-neutral browse-btn" data-target="config-project-path" data-type="dir"
+                                title="Change Project Path in Config">Change...</button>
+                        </div>
+                    </div>
+                    <p class="description">Runs <code>npm run build</code> and `npm run minima:zip` in the configured
+                        workspace.</p>
+                    <div class="button-group">
+                        <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Run
+                            & Zip</button>
+                    </div>
+                    <div class="build-output-container">
+                        <div class="output-header">
+                            <span>Build Output</span>
+                            <button id="copy-build-output-btn" class="btn btn-small btn-copy">Copy Output</button>
+                        </div>
+                        <pre id="build-output" class="terminal-output"></pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Template for Node Card -->
+    <template id="node-template">
+        <div class="node-card" id="node-card-template">
+            <div class="node-header">
+                <h2>Node <span class="node-id"></span></h2>
+                <div class="node-info">
+                    <span class="status-indicator stopped"></span>
+                    <span class="ip-port">127.0.0.1:<span class="port-number"></span></span>
+                </div>
+            </div>
+
+            <div class="node-controls">
+                <!-- Checkboxes -->
+                <div class="control-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" class="clean-check"> Clean Mode
+                    </label>
+                    <label class="checkbox-container genesis-container">
+                        <input type="checkbox" class="genesis-check"> Genesis
+                    </label>
+                </div>
+
+                <!-- Connect Input -->
+                <div class="control-group connect-group">
+                    <button class="btn btn-blue connect-to-node1-btn">Connect</button>
+                    <label>to:</label>
+                    <input type="text" class="connect-input" placeholder="127.0.0.1:9001">
+                </div>
+
+                <!-- Advanced Options -->
+                <details class="advanced-options">
+                    <summary>Advanced Params</summary>
+                    <div class="advanced-grid">
+                        <label><input type="checkbox" class="param-check" value="-mdsenable" checked>
+                            -mdsenable</label>
+                        <label><input type="checkbox" class="param-check" value="-test" checked> -test</label>
+                        <label><input type="checkbox" class="param-check" value="-nop2p"> -nop2p</label>
+                        <label><input type="checkbox" class="param-check" value="-private"> -private</label>
+                        <label><input type="checkbox" class="param-check" value="-noconnect"> -noconnect</label>
+                        <label><input type="checkbox" class="param-check" value="-server"> -server</label>
+                        <label><input type="checkbox" class="param-check" value="-archive"> -archive</label>
+                        <label><input type="checkbox" class="param-check" value="-rpcenable" checked>
+                            -rpcenable</label>
+                    </div>
+                </details>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <button class="btn btn-start start-btn">Start</button>
+                    <button class="btn btn-stop stop-btn" disabled>Stop</button>
+                    <button class="btn btn-copy copy-btn">Copy Log</button>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-net disconnect-btn" disabled>Disconnect Net</button>
+                    <!-- Export .env moved to Vite Tab -->
+                </div>
+            </div>
+
+            <!-- Log Window -->
+            <div class="log-window">
+                <pre class="log-content"></pre>
+            </div>
+
+            <!-- Command Input -->
+            <div class="command-bar">
+                <input type="text" class="command-input" placeholder="> Type command...">
+                <button class="btn btn-send send-btn">Send</button>
+            </div>
+        </div>
+    </template>
+
+
+
+
+
+    <!-- File Picker Modal -->
+    <div id="file-picker-modal" class="modal">
+        <div class="modal-content file-picker-content">
+            <span class="close-btn" id="close-file-picker">&times;</span>
+            <h2 id="file-picker-title">Select File/Directory</h2>
+            <div class="file-picker-path">
+                <button id="fp-up-btn" class="btn btn-small btn-grey">⬆ Up</button>
+                <input type="text" id="fp-current-path" readonly>
+            </div>
+            <div id="file-list" class="file-list"></div>
+            <div class="modal-actions">
+                <button id="fp-select-btn" class="btn btn-green">Select Current Directory</button>
+                <button id="fp-cancel-btn" class="btn btn-red">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="global-log-helper.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
