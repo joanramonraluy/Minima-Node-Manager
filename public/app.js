@@ -6,15 +6,44 @@ let visibleNodes = 0;
 // DOM Elements
 // DOM Elements
 let grid, globalLog, template;
+let nodeCountInput;
 
 document.addEventListener('DOMContentLoaded', () => {
     grid = document.querySelector('.grid');
     // globalLog = document.getElementById('global-log'); // Removed in favor of inline logs
     template = document.getElementById('node-template');
+    nodeCountInput = document.getElementById('node-count-input');
 
     if (!template) {
         console.error("Critical: 'node-template' not found in DOM.");
         return;
+    }
+
+    if (nodeCountInput) {
+        // Use 'input' for smoother feedback, but be careful with validation
+        nodeCountInput.addEventListener('input', () => {
+            let rawVal = parseInt(nodeCountInput.value);
+            if (isNaN(rawVal)) return;
+
+            let count = rawVal;
+            if (count < 1) count = 1;
+            if (count > MAX_NODES) count = MAX_NODES;
+
+            // Only update value if it was clamped to prevent cursor jumping on valid inputs
+            if (count !== rawVal) {
+                nodeCountInput.value = count;
+            }
+
+            updateVisibleNodes(count);
+        });
+    }
+
+
+    const toggleViewBtn = document.getElementById('toggle-view-btn');
+    if (toggleViewBtn) {
+        toggleViewBtn.onclick = () => {
+            grid.classList.toggle('list-view');
+        };
     }
 
     // Init
@@ -78,9 +107,15 @@ window.openTab = function (evt, tabName) {
 // Initialize Grid (Start with 2 nodes)
 
 // Initialize Grid (Start with 2 nodes)
+// Initialize Grid (Start with input value, default 2)
 function initGrid() {
-    addNode(); // Node 1
-    addNode(); // Node 2
+    let count = 2;
+    if (nodeCountInput && nodeCountInput.value) {
+        count = parseInt(nodeCountInput.value);
+        // Safety check for NaN
+        if (isNaN(count)) count = 2;
+    }
+    updateVisibleNodes(count);
 }
 
 function addNode() {
@@ -131,25 +166,56 @@ function addNode() {
         connectInput.value = '10.0.0.11:9001'; // Default connect to Node 1
     }
 
-    // Hide "Connect to Node 1" button for Node 1
-    const connectToNode1Btn = card.querySelector('.connect-to-node1-btn');
-    if (i === 1) {
-        connectToNode1Btn.style.display = 'none';
-    }
+    // Hide "Connect to Node 1" button logic removed
 
+    // Event Listeners
     // Event Listeners
     const startBtn = card.querySelector('.start-btn');
     const stopBtn = card.querySelector('.stop-btn');
     const copyBtn = card.querySelector('.copy-btn');
     const sendBtn = card.querySelector('.send-btn');
     const commandInput = card.querySelector('.command-input');
-    const disconnectBtn = card.querySelector('.disconnect-btn'); // Assuming this element exists in the template
+    const disconnectBtn = card.querySelector('.disconnect-btn');
 
+    // Start Command Preview Logic
+    const startCmdPreview = card.querySelector('.start-cmd-preview');
+    const paramChecks = card.querySelectorAll('.param-check');
+
+    function updateCommandPreview() {
+        // If user manually edited, we might want to respect that?
+        // For now, let's keep it simple: any checkbox change regenerates the command.
+        // If the user wants a custom command, they edit it and DON'T touch checkboxes after.
+
+        let cmd = `./scripts/start_node.sh ${i}`;
+
+        if (cleanCheck.checked && cleanCheck.parentElement.style.display !== 'none') cmd += ' -clean';
+        if (genesisCheck.checked && genesisContainer.style.display !== 'none') cmd += ' -genesis';
+
+        const connectVal = connectInput.value.trim();
+        if ((i > 1) && connectVal) {
+            cmd += ` -connect ${connectVal}`;
+        }
+
+        paramChecks.forEach(chk => {
+            if (chk.checked) cmd += ` ${chk.value}`;
+        });
+
+        startCmdPreview.value = cmd;
+    }
+
+    // Attach listeners to all inputs that affect the command
+    cleanCheck.addEventListener('change', updateCommandPreview);
+    genesisCheck.addEventListener('change', updateCommandPreview);
+    connectInput.addEventListener('input', updateCommandPreview);
+    paramChecks.forEach(chk => chk.addEventListener('change', updateCommandPreview));
+
+    // Initialize Preview
+    updateCommandPreview();
 
     startBtn.onclick = () => {
-        // Collect Advanced Params
+        // OLD: Collect Advanced Params
+        /*
         const advancedParams = [];
-        const paramChecks = card.querySelectorAll('.param-check');
         paramChecks.forEach(chk => {
             if (chk.checked) advancedParams.push(chk.value);
         });
@@ -161,6 +227,16 @@ function addNode() {
             advancedParams: advancedParams
         };
         socket.emit('start-node', { id: i, options });
+        */
+
+        // NEW: Send the raw command string
+        // We trim just in case
+        const rawCommand = startCmdPreview.value.trim();
+        if (rawCommand) {
+            const autoNameCheck = document.getElementById('auto-name-check');
+            const autoName = autoNameCheck ? autoNameCheck.checked : false;
+            socket.emit('start-node', { id: i, command: rawCommand, autoName });
+        }
     };
 
     stopBtn.onclick = () => {
@@ -189,28 +265,10 @@ function addNode() {
     if (exportEnvBtn) { ... } 
     */
 
-    // Connect to Node 1 (executes connect command)
-    connectToNode1Btn.onclick = () => {
-        if (i === 1) {
-            const msg = `[System] Node 1 is the genesis node.`;
-            addToGlobalLog(msg);
-            return;
-        }
-        const connectCommand = 'connect host:10.0.0.11:9001';
-        socket.emit('send-command', { id: i, command: connectCommand });
-
-        // Visual feedback
-        const originalBg = connectToNode1Btn.style.backgroundColor;
-        const originalColor = connectToNode1Btn.style.color;
-        connectToNode1Btn.style.setProperty('background-color', 'var(--accent-primary)');
-        connectToNode1Btn.style.color = '#000';
-        connectToNode1Btn.textContent = '✓ Connecting...';
-        setTimeout(() => {
-            connectToNode1Btn.style.backgroundColor = originalBg;
-            connectToNode1Btn.style.color = originalColor;
-            connectToNode1Btn.textContent = 'Connect to Node 1';
-        }, 2000);
-    };
+    /*
+    // Connect to Node 1 Button Removed
+    connectToNode1Btn.onclick = () => { ... }
+    */
 
     sendBtn.onclick = () => sendCommand(i, commandInput);
     commandInput.onkeypress = (e) => {
@@ -242,7 +300,7 @@ function addNode() {
     grid.appendChild(clone);
 }
 
-document.getElementById('add-node-btn').onclick = addNode;
+
 
 function sendCommand(id, input) {
     const command = input.value;
@@ -253,7 +311,33 @@ function sendCommand(id, input) {
 }
 
 // Global Controls
+// nodeCountInput initialized in DOMContentLoaded and listener attached there
+// See top of file
+
+function updateVisibleNodes(targetCount) {
+    // Add nodes if needed
+    while (visibleNodes < targetCount) {
+        addNode();
+    }
+
+    // Remove nodes if needed
+    while (visibleNodes > targetCount) {
+        removeNode();
+    }
+}
+
+function removeNode() {
+    if (visibleNodes <= 0) return;
+    const i = visibleNodes;
+    const card = document.getElementById(`node-${i}`);
+    if (card) {
+        card.remove();
+    }
+    visibleNodes--;
+}
+
 document.getElementById('start-all-btn').onclick = () => {
+    addToGlobalLog('[System] Starting all nodes...');
     // Determine how many nodes to start - all visible ones
     for (let i = 1; i <= visibleNodes; i++) {
         const card = document.getElementById(`node-${i}`);
@@ -263,11 +347,40 @@ document.getElementById('start-all-btn').onclick = () => {
     }
 };
 
-document.getElementById('stop-all-btn').onclick = () => socket.emit('stop-all');
-document.getElementById('kill-all-btn').onclick = () => socket.emit('kill-all');
-document.getElementById('toggle-view-btn').onclick = () => {
-    grid.classList.toggle('list-view');
+document.getElementById('stop-all-btn').onclick = () => {
+    addToGlobalLog('[System] Stopping all nodes...');
+    socket.emit('stop-all');
 };
+document.getElementById('kill-all-btn').onclick = () => {
+    addToGlobalLog('[System] Force killing all nodes...');
+    socket.emit('kill-all');
+};
+
+document.getElementById('open-all-btn').onclick = () => {
+    let opened = 0;
+    // Determine loop range
+    for (let i = 1; i <= visibleNodes; i++) {
+        const card = document.getElementById(`node-${i}`);
+        if (card) {
+            const indicator = card.querySelector('.status-indicator');
+            // Check for running class
+            if (indicator && indicator.classList.contains('running')) {
+                const ip = `10.0.0.${10 + i}`;
+                const mdsPort = 9003;
+                window.open(`https://${ip}:${mdsPort}/`, '_blank');
+                opened++;
+            }
+        }
+    }
+
+    if (opened === 0) {
+        alert('No running nodes found to open. Start some nodes first!');
+    } else {
+        addToGlobalLog(`[System] Opening ${opened} nodes in browser tabs... (If blocked, please allow popups!)`);
+    }
+};
+// toggle-view-btn listener moved to DOMContentLoaded
+
 
 // Vite Controls
 const startViteBtn = document.getElementById('start-vite-btn');
@@ -356,10 +469,13 @@ const batchUninstallBtn = document.getElementById('batch-uninstall-btn');
 // Set default location
 dappLocationConfigInput.value = globalConfig.dappLocation;
 
+const dappWriteModeCheck = document.getElementById('dapp-write-mode-check');
+
 batchInstallBtn.onclick = () => {
     const filePath = dappLocationConfigInput.value.trim();
+    const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
     if (filePath) {
-        socket.emit('batch-dapp-install', { filePath });
+        socket.emit('batch-dapp-install', { filePath, writeMode });
     } else {
         alert('Please specify the dApp Build Location file path.');
     }
@@ -367,8 +483,9 @@ batchInstallBtn.onclick = () => {
 
 batchUpdateBtn.onclick = () => {
     const filePath = dappLocationConfigInput.value.trim();
+    const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
     if (filePath) {
-        socket.emit('batch-dapp-install', { filePath, update: true });
+        socket.emit('batch-dapp-install', { filePath, update: true, writeMode });
     } else {
         alert('Please specify the dApp Build Location file path.');
     }
@@ -662,6 +779,33 @@ closeFilePickerBtn.onclick = () => {
     filePickerModal.style.display = 'none';
 };
 
+// Global Configuration Modal
+const globalConfigModal = document.getElementById('global-config-modal');
+const globalConfigBtn = document.getElementById('global-config-btn');
+const closeGlobalConfigBtn = document.getElementById('close-global-config');
+
+if (globalConfigBtn) {
+    globalConfigBtn.onclick = () => {
+        globalConfigModal.style.display = 'block';
+    };
+}
+
+if (closeGlobalConfigBtn) {
+    closeGlobalConfigBtn.onclick = () => {
+        globalConfigModal.style.display = 'none';
+    };
+}
+
+// Close modal when clicking outside
+window.onclick = (event) => {
+    if (event.target === globalConfigModal) {
+        globalConfigModal.style.display = 'none';
+    }
+    if (event.target === filePickerModal) {
+        filePickerModal.style.display = 'none';
+    }
+};
+
 // Sync Build Workspace input on load
 const buildWorkspacePathInput = document.getElementById('build-workspace-path');
 if (buildWorkspacePathInput && configProjectPathInput) {
@@ -842,3 +986,95 @@ window.addToGlobalLog = (content) => appendLog('system-log', content);
 
 // Init
 // Init call moved to DOMContentLoaded listener at the top
+
+// --- Global Start Command Logic ---
+const applyGlobalCmdBtn = document.getElementById('apply-global-cmd-btn');
+const globalCmdTemplateInput = document.getElementById('global-cmd-template');
+
+// Global Params Elements
+const globalCleanCheck = document.getElementById('global-clean-check');
+const globalGenesisCheck = document.getElementById('global-genesis-check');
+const globalConnectInput = document.getElementById('global-connect-input');
+// Note: We need to use a static NodeList or re-query if dynamic, but these are static in HTML now
+const globalParamChecks = document.querySelectorAll('.global-param-check');
+
+function updateGlobalTemplate() {
+    let cmd = './scripts/start_node.sh $ID';
+
+    // Add Clean/Genesis if checked
+    if (globalCleanCheck && globalCleanCheck.checked) cmd += ' -clean';
+    if (globalGenesisCheck && globalGenesisCheck.checked) cmd += ' -genesis';
+
+    // Add Connect if present
+    if (globalConnectInput && globalConnectInput.value.trim()) {
+        cmd += ` -connect ${globalConnectInput.value.trim()}`;
+    }
+
+    // Add Advanced Params
+    if (globalParamChecks) {
+        globalParamChecks.forEach(chk => {
+            if (chk.checked) cmd += ` ${chk.value}`;
+        });
+    }
+
+    if (globalCmdTemplateInput) {
+        globalCmdTemplateInput.value = cmd;
+    }
+}
+
+// Attach Listeners
+if (globalCleanCheck) globalCleanCheck.addEventListener('change', updateGlobalTemplate);
+if (globalGenesisCheck) globalGenesisCheck.addEventListener('change', updateGlobalTemplate);
+if (globalConnectInput) globalConnectInput.addEventListener('input', updateGlobalTemplate);
+if (globalParamChecks) globalParamChecks.forEach(chk => chk.addEventListener('change', updateGlobalTemplate));
+
+// Initialize Global Template if elements exist
+if (globalCleanCheck) updateGlobalTemplate();
+
+if (applyGlobalCmdBtn && globalCmdTemplateInput) {
+    applyGlobalCmdBtn.onclick = () => {
+        const template = globalCmdTemplateInput.value;
+        if (!template.trim()) {
+            alert('Please enter a command template.');
+            return;
+        }
+
+        // Confirm removed as per user request
+        // Iterate all visible nodes
+        for (let i = 1; i <= visibleNodes; i++) {
+            const card = document.getElementById(`node-${i}`);
+            if (card) {
+                const previewInput = card.querySelector('.start-cmd-preview');
+                if (previewInput) {
+                    // Replace $ID with actual ID
+                    let newCmd = template.replace(/\$ID/g, i);
+
+                    // Node 1: Remove -connect if present (Node 1 doesn't connect to anyone typically in this star topology)
+                    // Node > 1: Remove -genesis if present
+                    if (i === 1) {
+                        // Remove -connect and its argument
+                        newCmd = newCmd.replace(/\s+-connect\s+\S+/g, '');
+                        // Also cleanup simple flag if arg missing (defensive)
+                        newCmd = newCmd.replace(/\s+-connect\b/g, '');
+                    } else {
+                        // Remove -genesis
+                        newCmd = newCmd.replace(/\s+-genesis\b/g, '');
+                    }
+
+                    // Clean up double spaces
+                    newCmd = newCmd.replace(/\s+/g, ' ').trim();
+
+                    previewInput.value = newCmd;
+
+                    // Visual feedback
+                    previewInput.style.backgroundColor = '#2a2a2a';
+                    setTimeout(() => previewInput.style.backgroundColor = '', 500);
+                }
+            }
+        }
+        addToGlobalLog(`[System] Applied global command template to ${visibleNodes} nodes.`);
+
+        // Close modal after applying for better UX
+        if (globalConfigModal) globalConfigModal.style.display = 'none';
+    };
+}

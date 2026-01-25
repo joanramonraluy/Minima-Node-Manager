@@ -60,30 +60,45 @@ app.use(express.static('public'));
 function startNode(id, options = {}) {
     if (nodeProcesses[id]) return; // Already running
 
-    const { clean, genesis, connect, advancedParams } = options;
-    const args = [id];
+    let cmd = './scripts/start_node.sh';
+    let args = [];
+    let fullCommandStr = '';
 
-    // Construct arguments for start_node.sh
-    if (clean) args.push('-clean');
-    if (genesis) args.push('-genesis');
-    if (connect && connect.trim().length > 0) {
-        args.push('-connect');
-        args.push(connect);
+    if (options.command) {
+        // Use the provided command string
+        // Simple splitting by space (doesn't handle quoted arguments with spaces)
+        const parts = options.command.trim().split(/\s+/);
+        cmd = parts[0];
+        args = parts.slice(1);
+        fullCommandStr = options.command;
+    } else {
+        // Construct arguments from options
+        const { clean, genesis, connect, advancedParams } = options;
+        args.push(id);
+
+        if (clean) args.push('-clean');
+        if (genesis) args.push('-genesis');
+        if (connect && connect.trim().length > 0) {
+            args.push('-connect');
+            args.push(connect);
+        }
+
+        // Add Advanced Params
+        if (advancedParams && Array.isArray(advancedParams)) {
+            advancedParams.forEach(param => {
+                if (param === '-clean' && clean) return;
+                if (param === '-genesis' && genesis) return;
+                args.push(param);
+            });
+        }
+        fullCommandStr = `${cmd} ${args.join(' ')}`;
     }
 
-    // Add Advanced Params
-    if (advancedParams && Array.isArray(advancedParams)) {
-        advancedParams.forEach(param => {
-            // Avoid duplicates if handled elsewhere (e.g. genesis/clean)
-            if (param === '-clean' && clean) return;
-            if (param === '-genesis' && genesis) return;
-            args.push(param);
-        });
-    }
+    // Explicitly show the command in the logs
+    io.emit('log-update', { id, type: 'system', content: `> Executing: ${fullCommandStr}\n` });
 
     // Spawn without 'sudo' prefix since server is already root
-    // Using explicit path to ensure script execution
-    const child = spawn('./scripts/start_node.sh', args);
+    const child = spawn(cmd, args);
     nodeProcesses[id] = child;
 
     // Stream Output to Socket.io
@@ -103,6 +118,10 @@ function startNode(id, options = {}) {
 
     io.emit('node-status', { id, status: 'running' });
     io.emit('log-update', { id, type: 'system', content: `[System] Node ${id} started\n` });
+
+    if (options.autoName) {
+        scheduleAutoName(id);
+    }
 }
 
 function stopNode(id) {
@@ -135,7 +154,11 @@ io.on('connection', (socket) => {
 
     // Handle Start Node
     socket.on('start-node', (data) => {
-        startNode(data.id, data.options);
+        // Handle both legacy (options object) and new (command string) formats
+        // Handle both legacy (options object) and new (command string) formats
+        const opts = data.command ? { command: data.command } : data.options || {};
+        if (data.autoName) opts.autoName = true;
+        startNode(data.id, opts);
     });
 
     // Handle Stop Node
@@ -339,38 +362,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
     // --- Batch dApp Management (RPC Based) ---
 
     // Helper for RPC commands
-    function sendMinimaRpc(id, command, callback) {
-        const idStr = id.toString();
-        const nodeIp = `10.0.0.1${idStr}`;
 
-        // Use Minima RPC on port 9005 (HTTPS) as 9002 is not available/enabled
-        const rpcOptions = {
-            hostname: nodeIp,
-            port: 9005,
-            path: '/' + encodeURIComponent(command),
-            method: 'GET',
-            rejectUnauthorized: false,
-            headers: {
-                'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64')
-            }
-        };
-
-        const req = https.request(rpcOptions, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(body);
-                    callback(null, json);
-                } catch (e) {
-                    callback(e);
-                }
-            });
-        });
-
-        req.on('error', (e) => callback(e));
-        req.end();
-    }
 
     // Get dApps List (Query first available running node)
     socket.on('get-dapps', () => {
@@ -431,17 +423,20 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
     });
 
     socket.on('batch-dapp-install', (data) => {
-        const { filePath } = data;
+        const { filePath, writeMode } = data;
         if (!filePath || filePath.trim() === '') {
             io.emit('dapp-log', '[Error] No file path provided for dApp installation.');
             return;
         }
 
-        io.emit('dapp-log', `[Batch] Installing dApp from ${filePath} on all running nodes...`);
+        const modeStr = writeMode ? '(Write Mode)' : '(Read Mode)';
+        io.emit('dapp-log', `[Batch] Installing dApp ${modeStr} from ${filePath} on all running nodes...`);
 
         Object.keys(nodeProcesses).forEach((id) => {
             // Use RPC to get feedback
-            const command = `mds action:install file:"${filePath}"`;
+            // If writeMode is true, append trust:write
+            const trustParams = writeMode ? ' trust:write' : '';
+            const command = `mds action:install file:"${filePath}"${trustParams}`;
 
             sendMinimaRpc(id, command, (err, json) => {
                 if (err) {
@@ -543,6 +538,69 @@ server.listen(PORT, () => {
     // Auto Setup Network
     console.log('Running Auto Network Setup...');
     const setup = spawn('./scripts/setup_namespaces.sh');
-    setup.stdout.on('data', d => console.log(`[Network Setup] ${d.toString().trim()}`));
     setup.stderr.on('data', d => console.error(`[Network Setup Error] ${d.toString().trim()}`));
 });
+
+
+// Helper for RPC commands (Global)
+function sendMinimaRpc(id, command, callback) {
+    const idStr = id.toString();
+    const nodeIp = `10.0.0.1${idStr}`;
+
+    // Use Minima RPC on port 9005 (HTTPS)
+    const rpcOptions = {
+        hostname: nodeIp,
+        port: 9005,
+        path: '/' + encodeURIComponent(command),
+        method: 'GET',
+        rejectUnauthorized: false,
+        headers: {
+            'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64')
+        }
+    };
+
+    const req = https.request(rpcOptions, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+            try {
+                const json = JSON.parse(body);
+                callback(null, json);
+            } catch (e) {
+                callback(e);
+            }
+        });
+    });
+
+    req.on('error', (e) => callback(e));
+    req.end();
+}
+
+function scheduleAutoName(id) {
+    const name = `user${id}`;
+    io.emit('log-update', { id, type: 'system', content: `[Auto-Name] Waiting for RPC to set name to '${name}'...\n` });
+
+    let attempts = 0;
+    const maxAttempts = 15;
+    const intervalTime = 2000;
+
+    const poller = setInterval(() => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(poller);
+            io.emit('log-update', { id, type: 'system', content: `[Auto-Name] Failed to set name: Timeout waiting for RPC.\n` });
+            return;
+        }
+
+        // Try to set name
+        const command = `maxima action:setname name:"${name}"`;
+        sendMinimaRpc(id, command, (err, json) => {
+            if (!err && json && json.status) {
+                clearInterval(poller);
+                const resp = json.response ? JSON.stringify(json.response) : 'Success';
+                io.emit('log-update', { id, type: 'system', content: `[Auto-Name] Name set to '${name}': ${resp}\n` });
+            }
+        });
+
+    }, intervalTime);
+}

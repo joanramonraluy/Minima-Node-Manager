@@ -234,12 +234,43 @@ body {
     margin-bottom: 20px;
 }
 
-.control-panel h3 {
+.control-panel h3,
+.control-panel summary {
     margin-top: 0;
     color: var(--accent-blue);
     border-bottom: 1px solid #444;
     padding-bottom: 10px;
     margin-bottom: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1.17em;
+    /* Match h3 default roughly */
+    outline: none;
+    list-style: none;
+    /* Hide default marker */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Custom Arrow Indicator */
+.control-panel summary::after {
+    content: '▼';
+    font-size: 0.8rem;
+    transition: transform 0.3s ease;
+    transform: rotate(-90deg);
+    /* Point right when closed */
+}
+
+/* Rotate arrow when open */
+details.control-panel[open] summary::after {
+    transform: rotate(0deg);
+    /* Point down when open */
+}
+
+/* Hide default marker in Webkit/Blink */
+.control-panel summary::-webkit-details-marker {
+    display: none;
 }
 
 .button-group {
@@ -261,6 +292,7 @@ body {
 .input-group {
     display: flex;
     gap: 10px;
+    align-items: center;
 }
 
 /* Build Output */
@@ -311,6 +343,28 @@ body {
     font-size: 0.8rem;
     border-bottom: 1px solid #333;
     font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Hide default marker */
+.log-header::-webkit-details-marker {
+    display: none;
+}
+
+/* Custom Arrow Indicator for log */
+.log-header::after {
+    content: '▼';
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+}
+
+/* Rotate arrow when closed */
+details.inline-log-container:not([open]) .log-header::after {
+    transform: rotate(-90deg);
 }
 
 .global-log-instance {
@@ -817,3 +871,48 @@ textarea:focus {
 }
 
 /* Cleaned up sticky logic */
+
+/* Checkbox Container Styles */
+.checkbox-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: #ccc;
+}
+
+.checkbox-container input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* Modal Content Improvements */
+.modal-content h2 {
+    margin-top: 0;
+    color: var(--accent-primary);
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=number] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+/* Blue Button */
+.btn-blue {
+    background-color: #007bff;
+    color: #fff;
+    border: 1px solid #007bff;
+}
+
+.btn-blue:hover {
+    background-color: #0056b3;
+}
