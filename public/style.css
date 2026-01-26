@@ -80,6 +80,7 @@ body {
     border-radius: 4px;
     mix-blend-mode: lighten;
     /* Blend black bg with header black */
+    object-fit: contain;
 }
 
 .topbar-header h1 {
@@ -852,6 +853,16 @@ textarea:focus {
     flex-direction: column;
     background-color: var(--card-bg);
     /* Match card theme */
+}
+
+.file-list {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid #333;
+    background: #111;
+    margin: 10px 0;
+    padding: 5px;
+    border-radius: 4px;
 }
 
 /* ... */

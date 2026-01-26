@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minima Node Manager</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:;base64,iVB0w0KGgo=">
+    <link rel="icon" href="favicon.png">
 </head>
 
 <body>
@@ -135,12 +135,14 @@
                     <div class="button-group">
                         <button id="start-vite-btn" class="btn btn-primary">Start Vite Server</button>
                         <button id="stop-vite-btn" class="btn btn-danger" disabled>Stop Vite</button>
+                        <button id="vite-build-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
+                            Project</button>
                         <button id="open-app-btn" class="btn btn-secondary" style="display:none;">Open App ↗</button>
                     </div>
                     <!-- Log moved inside control panel -->
                     <div class="inline-log-container" style="margin-top: 20px;">
                         <div class="log-header">Vite Server Output</div>
-                        <div id="vite-log" class="global-log-instance" style="height: 300px;"></div>
+                        <div id="vite-log" class="terminal-output"></div>
                     </div>
                 </div>
             </div>
@@ -192,7 +194,7 @@
                     <!-- Log moved inside control panel -->
                     <div class="inline-log-container" style="margin-top: 20px;">
                         <div class="log-header">dApp Operations Log</div>
-                        <div id="dapp-log" class="global-log-instance" style="height: 300px;"></div>
+                        <div id="dapp-log" class="terminal-output"></div>
                     </div>
                 </div>
             </div>

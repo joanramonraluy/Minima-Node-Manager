@@ -174,7 +174,7 @@ function addNode() {
     const stopBtn = card.querySelector('.stop-btn');
     const copyBtn = card.querySelector('.copy-btn');
     const sendBtn = card.querySelector('.send-btn');
-    const commandInput = card.querySelector('.command-input');
+    const commandInput = card.querySelector('.command-bar .command-input');
     const disconnectBtn = card.querySelector('.disconnect-btn');
 
     // Start Command Preview Logic
@@ -271,7 +271,7 @@ function addNode() {
     */
 
     sendBtn.onclick = () => sendCommand(i, commandInput);
-    commandInput.onkeypress = (e) => {
+    commandInput.onkeydown = (e) => {
         if (e.key === 'Enter') sendCommand(i, commandInput);
     };
 
@@ -437,6 +437,9 @@ saveConfigBtn.onclick = () => {
 // Vite Controls
 if (startViteBtn) {
     startViteBtn.onclick = () => {
+        const logObj = document.getElementById('vite-log');
+        if (logObj) logObj.textContent = 'Starting Vite Server...\n';
+
         startViteBtn.disabled = true;
         startViteBtn.textContent = 'Starting...';
         socket.emit('start-vite');
@@ -448,6 +451,23 @@ if (stopViteBtn) {
         stopViteBtn.disabled = true;
         socket.emit('stop-vite');
     };
+}
+
+const viteBuildBtn = document.getElementById('vite-build-btn');
+if (viteBuildBtn) {
+    viteBuildBtn.onclick = () => {
+        const logObj = document.getElementById('vite-log');
+        if (logObj) logObj.textContent = 'Starting Build Process...\n';
+
+        viteBuildBtn.disabled = true;
+        viteBuildBtn.textContent = 'Building...';
+        socket.emit('run-vite-build-only');
+    };
+
+    socket.on('vite-build-complete', () => {
+        viteBuildBtn.disabled = false;
+        viteBuildBtn.textContent = 'Build Project';
+    });
 }
 
 if (openAppBtn) {
@@ -472,6 +492,9 @@ dappLocationConfigInput.value = globalConfig.dappLocation;
 const dappWriteModeCheck = document.getElementById('dapp-write-mode-check');
 
 batchInstallBtn.onclick = () => {
+    const logObj = document.getElementById('dapp-log');
+    if (logObj) logObj.textContent = 'Starting Install Process...\n';
+
     const filePath = dappLocationConfigInput.value.trim();
     const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
     if (filePath) {
@@ -482,6 +505,9 @@ batchInstallBtn.onclick = () => {
 };
 
 batchUpdateBtn.onclick = () => {
+    const logObj = document.getElementById('dapp-log');
+    if (logObj) logObj.textContent = 'Starting Update Process...\n';
+
     const filePath = dappLocationConfigInput.value.trim();
     const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
     if (filePath) {
@@ -519,6 +545,7 @@ socket.on('dapp-list', (dapps) => {
             dapps.forEach(dapp => {
                 const option = document.createElement('option');
                 option.value = dapp.uid;
+                option.setAttribute('data-name', dapp.name);
                 option.textContent = `${dapp.name} (${dapp.version}) - ${dapp.uid.substring(0, 8)}...`;
                 dappSelect.appendChild(option);
             });
@@ -547,15 +574,17 @@ socket.on('dapp-list', (dapps) => {
 });
 
 batchUninstallBtn.onclick = () => {
+    const logObj = document.getElementById('dapp-log');
+    if (logObj) logObj.textContent = 'Starting Uninstall Process...\n';
+
     const uid = dappSelect.value;
     if (uid) {
-        const name = dappSelect.options[dappSelect.selectedIndex].text;
-        if (confirm(`Uninstall ${name} from ALL nodes?`)) {
-            socket.emit('batch-dapp-uninstall', { uid });
-            // Optimistic removal from list
-            dappSelect.remove(dappSelect.selectedIndex);
-            dappSelect.value = "";
-        }
+        const selectedOption = dappSelect.options[dappSelect.selectedIndex];
+        const name = selectedOption.getAttribute('data-name');
+        socket.emit('batch-dapp-uninstall', { uid, name });
+        // Optimistic removal from list
+        dappSelect.remove(dappSelect.selectedIndex);
+        dappSelect.value = "";
     } else {
         alert('Please select a dApp to uninstall.');
     }
@@ -848,6 +877,9 @@ function updateExportDropdown() {
 
 if (exportEnvBtn) {
     exportEnvBtn.onclick = () => {
+        const logObj = document.getElementById('vite-log');
+        if (logObj) logObj.textContent = 'Starting Export .env Process...\n';
+
         const nodeId = exportNodeSelect.value;
         if (!nodeId) {
             alert('Please select a running node to export from.');
@@ -940,14 +972,10 @@ socket.on('log-update', (data) => {
     const logPre = card.querySelector('.log-content');
     const logWindow = card.querySelector('.log-window');
 
-    // Check if scrolled to bottom
-    const isScrolledToBottom = logWindow.scrollHeight - logWindow.clientHeight <= logWindow.scrollTop + 10;
-
     logPre.textContent += content; // Using textContent safe against HTML injection
 
-    if (isScrolledToBottom) {
-        logWindow.scrollTop = logWindow.scrollHeight;
-    }
+    // Always scroll to bottom as requested
+    logWindow.scrollTop = logWindow.scrollHeight;
 });
 
 socket.on('global-log', (content) => {

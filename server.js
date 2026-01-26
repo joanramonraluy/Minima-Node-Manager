@@ -236,7 +236,7 @@ io.on('connection', (socket) => {
 
         // ... (rest of export logic)
         const idStr = id.toString();
-        const nodeIp = `10.0.0.1${idStr}`;
+        const nodeIp = `10.0.0.${10 + parseInt(id)}`;
 
         const rpcOptions = {
             hostname: nodeIp,
@@ -269,7 +269,7 @@ io.on('connection', (socket) => {
                             sessionUid = targetDapp.sessionid || targetDapp.uid;
                         } else {
                             const availableNames = list.map(d => d.conf ? d.conf.name : d.name).join(', ');
-                            io.emit('global-log', `[Error] Dapp '${targetDappName}' not found on Node ${id} (Available: ${availableNames})`);
+                            io.emit('vite-log', `[Error] Dapp '${targetDappName}' not found on Node ${id} (Available: ${availableNames})`);
                             return;
                         }
 
@@ -283,23 +283,23 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
                         fs.writeFile(finalPath, envContent, err => {
                             if (err) {
-                                io.emit('global-log', `[Error] Failed to write .env: ${err.message}`);
+                                io.emit('vite-log', `[Error] Failed to write .env: ${err.message}`);
                             } else {
-                                io.emit('global-log', `[Success] Exported .env for Node ${id} to ${finalPath}`);
+                                io.emit('vite-log', `[Success] Exported .env for Node ${id} to ${finalPath}`);
                             }
                         });
 
                     } else {
-                        io.emit('global-log', `[Error] Invalid RPC response from Node ${id}`);
+                        io.emit('vite-log', `[Error] Invalid RPC response from Node ${id}`);
                     }
                 } catch (e) {
-                    io.emit('global-log', `[Error] Failed to parse RPC from Node ${id}: ${e.message}`);
+                    io.emit('vite-log', `[Error] Failed to parse RPC from Node ${id}: ${e.message}`);
                 }
             });
         });
 
         req.on('error', e => {
-            io.emit('global-log', `[Error] RPC Request failed for Node ${id}: ${e.message}. Is -allowallip enabled?`);
+            io.emit('vite-log', `[Error] RPC Request failed for Node ${id}: ${e.message}. Is -allowallip enabled?`);
         });
         req.end();
     });
@@ -359,6 +359,29 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         }
     });
 
+    socket.on('run-vite-build-only', () => {
+        const cwd = globalConfig.projectPath;
+        io.emit('vite-log', `[System] Starting 'npm run build' in ${cwd}...\n`);
+
+        const build = spawn('npm', ['run', 'build'], {
+            cwd,
+            shell: true
+        });
+
+        build.stdout.on('data', (data) => {
+            io.emit('vite-log', data.toString());
+        });
+
+        build.stderr.on('data', (data) => {
+            io.emit('vite-log', `[stderr] ${data.toString()}`);
+        });
+
+        build.on('close', (code) => {
+            io.emit('vite-log', `\n[System] Build process exited with code ${code}\n`);
+            io.emit('vite-build-complete', { success: code === 0 });
+        });
+    });
+
     // --- Batch dApp Management (RPC Based) ---
 
     // Helper for RPC commands
@@ -376,7 +399,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         }
 
         const idStr = runningNodeId.toString();
-        const nodeIp = `10.0.0.1${idStr}`;
+        const nodeIp = `10.0.0.${10 + parseInt(runningNodeId)}`;
 
         const rpcOptions = {
             hostname: nodeIp,
@@ -423,58 +446,140 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
     });
 
     socket.on('batch-dapp-install', (data) => {
-        const { filePath, writeMode } = data;
+        const { filePath, writeMode, update } = data;
         if (!filePath || filePath.trim() === '') {
             io.emit('dapp-log', '[Error] No file path provided for dApp installation.');
             return;
         }
 
         const modeStr = writeMode ? '(Write Mode)' : '(Read Mode)';
-        io.emit('dapp-log', `[Batch] Installing dApp ${modeStr} from ${filePath} on all running nodes...`);
+        const actionStr = update ? 'Updating' : 'Installing';
 
-        Object.keys(nodeProcesses).forEach((id) => {
-            // Use RPC to get feedback
-            // If writeMode is true, append trust:write
-            const trustParams = writeMode ? ' trust:write' : '';
-            const command = `mds action:install file:"${filePath}"${trustParams}`;
+        const nodes = Object.keys(nodeProcesses);
+        io.emit('dapp-log', `\n[Batch] ${actionStr} dApp ${modeStr} from ${filePath} on ${nodes.length} nodes: ${nodes.join(', ')}...`);
 
-            sendMinimaRpc(id, command, (err, json) => {
-                if (err) {
-                    io.emit('dapp-log', `[Batch] Node ${id}: Request Failed - ${err.message}`);
-                } else {
-                    if (json.status) {
-                        const respStr = json.response ? JSON.stringify(json.response) : 'Done';
-                        io.emit('dapp-log', `[Batch] Node ${id}: Success - ${respStr}`);
+        nodes.forEach((id) => {
+            // Helper to perform the actual install/update
+            const performInstall = () => {
+                const trustParams = writeMode ? ' trust:write' : '';
+                const command = `mds action:install file:"${filePath}"${trustParams}`;
+                const actionLabel = "Install";
+
+                sendAction(id, command, actionLabel);
+            };
+
+            const performUpdate = (uid) => {
+                // Update doesn't seemingly take trust params in same way, but usually inherits or we just update code.
+                // Minima help: mds action:update uid:.. file:.. [trust:..]
+                const trustParams = writeMode ? ' trust:write' : '';
+                const command = `mds action:update uid:"${uid}" file:"${filePath}"${trustParams}`;
+                const actionLabel = "Update";
+
+                sendAction(id, command, actionLabel);
+            };
+
+            const sendAction = (nodeId, cmd, label) => {
+                sendMinimaRpc(nodeId, cmd, (err, json) => {
+                    if (err) {
+                        io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Request Failed - ${err.message}`);
                     } else {
-                        const errStr = json.message || json.error || 'Unknown Error';
-                        io.emit('dapp-log', `[Batch] Node ${id}: Failed - ${errStr}`);
+                        if (json.status) {
+                            const respStr = json.response ? JSON.stringify(json.response) : 'Done';
+                            io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Success - ${respStr}`);
+                        } else {
+                            const errStr = json.message || json.error || 'Unknown Error';
+                            io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Failed - ${errStr}`);
+                        }
                     }
+                });
+            }
+
+            if (update) {
+                // 1. Find the dApp UID by name
+                const targetName = globalConfig.dappName;
+                if (!targetName) {
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: Cannot update - No 'Dapp Name' configured in settings.`);
+                    return;
                 }
-            });
+
+                // Get list of dapps
+                sendMinimaRpc(id, 'mds', (err, json) => {
+                    if (err || !json.status || !json.response) {
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: Failed to fetch dApps list for update check.`);
+                        return;
+                    }
+
+                    const dapps = json.response;
+                    const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+
+                    const foundDapp = list.find(d => {
+                        const name = d.conf ? d.conf.name : d.name;
+                        return name && name.toLowerCase() === targetName.toLowerCase();
+                    });
+
+                    if (foundDapp) {
+                        const uid = foundDapp.uid;
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: Found dApp '${targetName}' (UID: ${uid}). Updating...`);
+                        performUpdate(uid);
+                    } else {
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${targetName}' not found. Cannot update. (To install fresh, uncheck Update)`);
+                    }
+                });
+
+            } else {
+                // FRESH INSTALL
+                performInstall();
+            }
         });
     });
 
     socket.on('batch-dapp-uninstall', (data) => {
-        const { uid } = data;
-        if (!uid || uid.trim() === '') {
-            io.emit('dapp-log', '[Error] No UID provided for dApp uninstallation.');
+        const { uid, name } = data;
+        if (!name || name.trim() === '') {
+            io.emit('dapp-log', '[Error] No dApp name provided for uninstallation.');
             return;
         }
 
-        io.emit('dapp-log', `[Batch] Uninstalling dApp ${uid} from all running nodes...`);
+        const nodes = Object.keys(nodeProcesses);
+        io.emit('dapp-log', `\n[Batch] Uninstalling dApp '${name}' from ${nodes.length} nodes: ${nodes.join(', ')}...`);
 
-        Object.keys(nodeProcesses).forEach((id) => {
-            const command = `mds action:uninstall uid:"${uid}"`;
-            sendMinimaRpc(id, command, (err, json) => {
-                if (err) {
-                    io.emit('dapp-log', `[Batch] Node ${id}: Request Failed - ${err.message}`);
-                } else {
-                    if (json.status) {
-                        io.emit('dapp-log', `[Batch] Node ${id}: Uninstall Success`);
-                    } else {
-                        io.emit('dapp-log', `[Batch] Node ${id}: Uninstall Failed - ${json.message}`);
-                    }
+        nodes.forEach((id) => {
+            // First, get the list of dApps on this node to find the correct UID
+            sendMinimaRpc(id, 'mds', (err, json) => {
+                if (err || !json.status || !json.response) {
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: Failed to fetch dApp list - ${err ? err.message : 'Invalid response'}`);
+                    return;
                 }
+
+                const dapps = json.response;
+                const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+
+                const foundDapp = list.find(d => {
+                    const dappName = d.conf ? d.conf.name : d.name;
+                    return dappName && dappName.toLowerCase() === name.toLowerCase();
+                });
+
+                if (!foundDapp) {
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${name}' not found (skipping)`);
+                    return;
+                }
+
+                const nodeUid = foundDapp.uid;
+                io.emit('dapp-log', `\n[Batch] Node ${id}: Found '${name}' with UID ${nodeUid.substring(0, 12)}... - Uninstalling...`);
+
+                // Now uninstall using the correct UID for this node
+                const command = `mds action:uninstall uid:"${nodeUid}"`;
+                sendMinimaRpc(id, command, (err, json) => {
+                    if (err) {
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: Uninstall Request Failed - ${err.message}`);
+                    } else {
+                        if (json.status) {
+                            io.emit('dapp-log', `\n[Batch] Node ${id}: Uninstall Success ✓`);
+                        } else {
+                            io.emit('dapp-log', `\n[Batch] Node ${id}: Uninstall Failed - ${json.message || 'Unknown error'}`);
+                        }
+                    }
+                });
             });
         });
     });
@@ -545,7 +650,7 @@ server.listen(PORT, () => {
 // Helper for RPC commands (Global)
 function sendMinimaRpc(id, command, callback) {
     const idStr = id.toString();
-    const nodeIp = `10.0.0.1${idStr}`;
+    const nodeIp = `10.0.0.${10 + parseInt(id)}`;
 
     // Use Minima RPC on port 9005 (HTTPS)
     const rpcOptions = {
