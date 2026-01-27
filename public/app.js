@@ -102,6 +102,23 @@ window.openTab = function (evt, tabName) {
             nextTab.classList.add("show", "active");
         }
     }
+
+    // Auto-refresh dApps when entering dApp tab
+    if (tabName === 'tab-dapps') {
+        console.log("Switching to dApp tab - triggering auto-refresh");
+        // Trigger refresh regardless of button state
+        if (typeof socket !== 'undefined') {
+            socket.emit('get-dapps');
+        } else {
+            console.error("Socket not defined when trying to auto-refresh dApps");
+        }
+
+        // Disable button if it exists (though it might be hidden now)
+        const refreshBtn = document.getElementById('refresh-dapps-btn');
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+        }
+    }
 };
 
 // Initialize Grid (Start with 2 nodes)
@@ -589,6 +606,22 @@ batchUninstallBtn.onclick = () => {
         alert('Please select a dApp to uninstall.');
     }
 };
+
+// Auto-refresh on dropdown interaction
+if (dappSelect) {
+    // We use 'mousedown' to trigger before the menu opens, though standard selects are tricky.
+    // It's a best-effort attempt.
+    let lastRefresh = 0;
+    dappSelect.addEventListener('mousedown', () => {
+        const now = Date.now();
+        // Throttle to avoid excessive requests (e.g. 5 seconds)
+        if (now - lastRefresh > 5000) {
+            console.log("Dropdown interaction - triggering auto-refresh");
+            socket.emit('get-dapps');
+            lastRefresh = now;
+        }
+    });
+}
 
 socket.on('vite-status', (status) => {
     if (status === 'running') {

@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const https = require('https'); // Required for Minima RPC on port 9005
 const { Server } = require('socket.io');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -644,6 +644,28 @@ server.listen(PORT, () => {
     console.log('Running Auto Network Setup...');
     const setup = spawn('./scripts/setup_namespaces.sh');
     setup.stderr.on('data', d => console.error(`[Network Setup Error] ${d.toString().trim()}`));
+
+    // Auto-open Browser
+    const pEnv = process.env;
+    const sudoUser = pEnv.SUDO_USER;
+    const url = `http://localhost:${PORT}`;
+
+    let openCmd = `xdg-open ${url}`;
+    if (sudoUser) {
+        // Run as the original user. 
+        // We use 'sudo -u' instead of 'su -' to avoid a full login shell that wipes variables.
+        // We likely need to set DISPLAY=:0 for GUI apps to find the session.
+        // potentially need DBUS_SESSION_BUS_ADDRESS as well, but DISPLAY=:0 often suffices for simple xdg-open.
+        openCmd = `sudo -u ${sudoUser} DISPLAY=:0 xdg-open ${url}`;
+    }
+
+    console.log(`Opening browser at ${url}...`);
+    exec(openCmd, (error) => {
+        if (error) {
+            console.error(`Failed to open browser: ${error.message}`);
+            console.log(`Please manually open: ${url}`);
+        }
+    });
 });
 
 
