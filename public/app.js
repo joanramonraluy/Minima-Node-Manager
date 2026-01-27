@@ -229,6 +229,13 @@ function addNode() {
     // Initialize Preview
     updateCommandPreview();
 
+    const clearLogBtn = card.querySelector('.clear-log-btn');
+    if (clearLogBtn) {
+        clearLogBtn.onclick = () => {
+            card.querySelector('.log-content').textContent = '';
+        };
+    }
+
     startBtn.onclick = () => {
         // OLD: Collect Advanced Params
         /*
@@ -236,7 +243,7 @@ function addNode() {
         paramChecks.forEach(chk => {
             if (chk.checked) advancedParams.push(chk.value);
         });
-
+    
         const options = {
             clean: cleanCheck.checked,
             genesis: i === 1 ? genesisCheck.checked : false,
@@ -372,6 +379,35 @@ document.getElementById('kill-all-btn').onclick = () => {
     addToGlobalLog('[System] Force killing all nodes...');
     socket.emit('kill-all');
 };
+
+const addNodeBtn = document.getElementById('add-node-btn');
+if (addNodeBtn) {
+    addNodeBtn.onclick = () => {
+        let count = parseInt(nodeCountInput.value);
+        if (count < MAX_NODES) {
+            count++;
+            nodeCountInput.value = count;
+            updateVisibleNodes(count);
+        } else {
+            alert('Maximum number of nodes reached.');
+        }
+    };
+}
+
+const clearAllLogsBtn = document.getElementById('clear-all-logs-btn');
+if (clearAllLogsBtn) {
+    clearAllLogsBtn.onclick = () => {
+        // Clear all node logs
+        document.querySelectorAll('.log-content').forEach(el => el.textContent = '');
+        // Clear global log if we want? Maybe distinct.
+        // Let's clear the global log too for a full "clean slate" feel, or just node logs.
+        // User asked "clean terminals", let's assume all.
+        const systemLog = document.getElementById('system-log');
+        if (systemLog) systemLog.innerHTML = '';
+
+        addToGlobalLog('[System] All logs cleared.');
+    };
+}
 
 document.getElementById('open-all-btn').onclick = () => {
     let opened = 0;

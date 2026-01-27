@@ -660,11 +660,28 @@ server.listen(PORT, () => {
     }
 
     console.log(`Opening browser at ${url}...`);
-    exec(openCmd, (error) => {
-        if (error) {
-            console.error(`Failed to open browser: ${error.message}`);
-            console.log(`Please manually open: ${url}`);
-        }
+    console.log(`Opening browser at ${url}...`);
+
+    // Use spawn instead of exec to detach the process
+    let cmd, args;
+    if (sudoUser) {
+        cmd = 'sudo';
+        args = ['-u', sudoUser, 'DISPLAY=:0', 'xdg-open', url];
+    } else {
+        cmd = 'xdg-open';
+        args = [url];
+    }
+
+    const subprocess = spawn(cmd, args, {
+        detached: true,
+        stdio: 'ignore'
+    });
+
+    subprocess.unref();
+
+    subprocess.on('error', (err) => {
+        console.error(`Failed to open browser: ${err.message}`);
+        console.log(`Please manually open: ${url}`);
     });
 });
 
