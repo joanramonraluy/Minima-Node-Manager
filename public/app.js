@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Tab Switching Logic
 // Tab Switching Logic
 let transitionTimeout;
+let lastDAppSwitchTime = 0;
 
 window.openTab = function (evt, tabName) {
     if (transitionTimeout) {
@@ -105,12 +106,19 @@ window.openTab = function (evt, tabName) {
 
     // Auto-refresh dApps when entering dApp tab
     if (tabName === 'tab-dapps') {
-        console.log("Switching to dApp tab - triggering auto-refresh");
-        // Trigger refresh regardless of button state
-        if (typeof socket !== 'undefined') {
-            socket.emit('get-dapps');
+        const now = Date.now();
+        // Debounce: Only refresh if > 2 seconds since last refresh
+        if (now - lastDAppSwitchTime > 2000) {
+            console.log("Switching to dApp tab - triggering auto-refresh");
+            // Trigger refresh regardless of button state
+            if (typeof socket !== 'undefined') {
+                socket.emit('get-dapps');
+                lastDAppSwitchTime = now;
+            } else {
+                console.error("Socket not defined when trying to auto-refresh dApps");
+            }
         } else {
-            console.error("Socket not defined when trying to auto-refresh dApps");
+            console.log("Skipping dApp auto-refresh (debounce active)");
         }
 
         // Disable button if it exists (though it might be hidden now)
