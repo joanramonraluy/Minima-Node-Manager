@@ -126,9 +126,16 @@ function startNode(id, options = {}) {
 
 function stopNode(id) {
     if (nodeProcesses[id]) {
-        // Send SIGTERM to the shell script
-        nodeProcesses[id].kill('SIGTERM');
-        // 'close' event will handle the rest
+        // Use the helper script to kill the process inside the namespace
+        const stopScript = spawn('./scripts/stop_node.sh', [id]);
+
+        stopScript.stdout.on('data', (d) => {
+            io.emit('log-update', { id, type: 'system', content: d.toString() });
+        });
+
+        // We don't manually delete nodeProcesses[id] here; 
+        // the startNode child process will emit 'close' when it actually exits,
+        // and that listener cleans up the map and updates status.
     }
 }
 
@@ -615,7 +622,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         io.emit('build-output', `[System] Starting 'npm run build && npm run minima:zip' in ${cwd}...\n`);
 
         // Run as a shell command to allow chaining &&
-        const build = spawn('npm run build && npm run minima:zip', {
+        const build = spawn('npm run generate:routes && npm run build && npm run minima:zip', {
             cwd,
             shell: true
         });

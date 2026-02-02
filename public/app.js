@@ -1042,7 +1042,13 @@ socket.on('node-status', (data) => {
 });
 
 socket.on('log-update', (data) => {
-    const { id, content } = data;
+    const { id, content, type } = data; // Check type
+
+    // Mirror 'system' logs to Global Log for better visibility
+    if (type === 'system') {
+        addToGlobalLog(`[Node ${id}] ${content.trim()}`);
+    }
+
     const card = document.getElementById(`node-${id}`);
     if (!card) return;
 
