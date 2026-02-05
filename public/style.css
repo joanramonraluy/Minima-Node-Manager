@@ -881,6 +881,45 @@ textarea:focus {
     color: #ccc;
 }
 
+/* File Picker Modal Button Styles */
+.file-picker-content .btn {
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+}
+
+.file-picker-content .btn-primary {
+    background-color: var(--accent-primary);
+    color: #000;
+}
+
+.file-picker-content .btn-neutral,
+.file-picker-content .btn-grey {
+    background-color: #444;
+    color: #e0e0e0;
+    border: 1px solid #555;
+}
+
+.file-picker-content .btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.file-picker-content button {
+    /* Fallback for any button without class */
+    background-color: #444;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+
 /* Cleaned up sticky logic */
 
 /* Checkbox Container Styles */

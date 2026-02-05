@@ -452,6 +452,7 @@ const openAppBtn = document.getElementById('open-app-btn');
 const configProjectPathInput = document.getElementById('config-project-path');
 const configDappNameInput = document.getElementById('config-dapp-name');
 const configEnvPathInput = document.getElementById('config-env-path');
+const configAdbPathInput = document.getElementById('config-adb-path');
 const saveConfigBtn = document.getElementById('save-config-btn');
 
 // Default Config
@@ -459,7 +460,8 @@ let globalConfig = {
     projectPath: '/home/joanramon/Minima/metachain',
     dappName: 'MetaChain',
     envPath: '/home/joanramon/Minima/metachain/.env',
-    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp'
+    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
+    adbPath: 'adb'
 };
 
 // Listen for Config from Server
@@ -470,6 +472,7 @@ socket.on('config-update', (config) => {
     if (configProjectPathInput) configProjectPathInput.value = globalConfig.projectPath;
     if (configDappNameInput) configDappNameInput.value = globalConfig.dappName;
     if (configEnvPathInput) configEnvPathInput.value = globalConfig.envPath;
+    if (configAdbPathInput) configAdbPathInput.value = globalConfig.adbPath || 'adb';
     if (dappLocationConfigInput) dappLocationConfigInput.value = globalConfig.dappLocation;
 
     // Also update build workspace path if it exists
@@ -483,17 +486,43 @@ socket.on('config-update', (config) => {
 configProjectPathInput.value = globalConfig.projectPath;
 configDappNameInput.value = globalConfig.dappName;
 configEnvPathInput.value = globalConfig.envPath;
+configAdbPathInput.value = globalConfig.adbPath;
 
 saveConfigBtn.onclick = () => {
     globalConfig.projectPath = configProjectPathInput.value.trim();
     globalConfig.dappName = configDappNameInput.value.trim();
     globalConfig.envPath = configEnvPathInput.value.trim();
+    globalConfig.adbPath = configAdbPathInput.value.trim() || 'adb';
 
-    addToGlobalLog(`[Config] Saved: Project=${globalConfig.projectPath}, Dapp=${globalConfig.dappName}`);
+    addToGlobalLog(`[Config] Saved: Project=${globalConfig.projectPath}, Dapp=${globalConfig.dappName}, ADB=${globalConfig.adbPath}`);
 
-    // Send update to server if needed, or just use these values in other emits
+    // Send update to server
     socket.emit('update-config', globalConfig);
 };
+
+// Separate save button for ADB config in Build & Zip tab
+const saveAdbConfigBtn = document.getElementById('save-adb-config-btn');
+if (saveAdbConfigBtn) {
+    saveAdbConfigBtn.onclick = () => {
+        const adbValue = configAdbPathInput.value.trim() || 'adb';
+        globalConfig.adbPath = adbValue;
+        addToGlobalLog(`[Config] ADB Path saved: ${globalConfig.adbPath}`);
+        socket.emit('update-config', globalConfig);
+
+        // Visual feedback
+        const originalText = saveAdbConfigBtn.textContent;
+        const originalBg = saveAdbConfigBtn.style.backgroundColor;
+        saveAdbConfigBtn.textContent = '✓ Saved';
+        saveAdbConfigBtn.style.backgroundColor = '#10b981'; // green
+        saveAdbConfigBtn.disabled = true;
+
+        setTimeout(() => {
+            saveAdbConfigBtn.textContent = originalText;
+            saveAdbConfigBtn.style.backgroundColor = originalBg;
+            saveAdbConfigBtn.disabled = false;
+        }, 1500);
+    };
+}
 
 // Vite Controls
 if (startViteBtn) {
@@ -684,6 +713,7 @@ socket.on('vite-status', (status) => {
 
 // Build & Zip Feature
 const buildZipBtn = document.getElementById('build-zip-btn');
+const buildAndroidBtn = document.getElementById('build-android-btn');
 const buildOutputObj = document.getElementById('build-output');
 const copyBuildOutputBtn = document.getElementById('copy-build-output-btn');
 
@@ -691,9 +721,20 @@ if (buildZipBtn) {
     buildZipBtn.onclick = () => {
         buildOutputObj.textContent = 'Starting Build & Zip process...\n';
         buildZipBtn.disabled = true;
+        if (buildAndroidBtn) buildAndroidBtn.disabled = true;
         socket.emit('run-build-zip');
     };
 }
+
+if (buildAndroidBtn) {
+    buildAndroidBtn.onclick = () => {
+        buildOutputObj.textContent = 'Starting Android Build & Install process (Build -> Sync -> AssembleDebug -> ADB Install)...\n';
+        buildAndroidBtn.disabled = true;
+        if (buildZipBtn) buildZipBtn.disabled = true;
+        socket.emit('run-android-build');
+    };
+}
+
 
 if (copyBuildOutputBtn) {
     copyBuildOutputBtn.onclick = () => {
@@ -713,7 +754,8 @@ socket.on('build-output', (data) => {
 });
 
 socket.on('build-complete', (data) => {
-    buildZipBtn.disabled = false;
+    if (buildZipBtn) buildZipBtn.disabled = false;
+    if (buildAndroidBtn) buildAndroidBtn.disabled = false;
     const { success } = data;
     buildOutputObj.textContent += `\n=== Process ${success ? 'Completed Successfully' : 'Failed'} ===\n`;
 });

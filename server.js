@@ -29,7 +29,8 @@ let globalConfig = {
     projectPath: '/home/joanramon/Minima/metachain',
     dappName: 'MetaChain',
     envPath: '/home/joanramon/Minima/metachain/.env',
-    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp'
+    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
+    adbPath: 'adb' // Default to 'adb' in PATH, or full path like ~/Android/Sdk/platform-tools/adb
 };
 
 // Load Config from File
@@ -640,6 +641,57 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             io.emit('build-complete', { success: code === 0 });
         });
     });
+
+    socket.on('run-android-build', () => {
+        const cwd = globalConfig.projectPath;
+        const adb = globalConfig.adbPath || 'adb';
+        io.emit('build-output', `[System] Starting Clean Android Build & Install in ${cwd}...\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        io.emit('build-output', `[System] This will clean old builds and rebuild everything from scratch\n\n`);
+
+        // Multi-step build process with clean
+        const commands = [
+            'echo "🧹 Cleaning old builds..."',
+            'rm -rf build',
+            'rm -rf android/app/src/main/assets/public',
+            'rm -rf android/app/build',
+            'echo "📦 Building web assets..."',
+            'npm run build',
+            'echo "🔄 Syncing with Capacitor..."',
+            'npx cap sync android',
+            'echo "🏗️  Building APK..."',
+            'cd android && ./gradlew clean assembleDebug && cd ..',
+            'echo "📱 Uninstalling old version..."',
+            `${adb} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
+            'echo "📲 Installing APK..."',
+            `${adb} install -r android/app/build/outputs/apk/debug/app-debug.apk`
+        ].join(' && ');
+
+        const build = spawn(commands, {
+            cwd,
+            shell: true
+        });
+
+        build.stdout.on('data', (data) => {
+            io.emit('build-output', data.toString());
+        });
+
+        build.stderr.on('data', (data) => {
+            io.emit('build-output', `[stderr] ${data.toString()}`);
+        });
+
+        build.on('close', (code) => {
+            io.emit('build-output', `\n[System] Process exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `\n✅ APK built and installed successfully!\n`);
+                io.emit('build-output', `📍 APK location: ${cwd}/android/app/build/outputs/apk/debug/app-debug.apk\n`);
+            } else {
+                io.emit('build-output', `\n❌ Process failed. Check output above for details.\n`);
+            }
+            io.emit('build-complete', { success: code === 0 });
+        });
+    });
+
 
 });
 

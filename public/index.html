@@ -110,6 +110,7 @@
                                 data-type="file">Browse...</button>
                         </div>
                     </div>
+
                     <div style="text-align: right; margin-top: 10px;">
                         <button id="save-config-btn" class="btn btn-primary">Save Config</button>
                     </div>
@@ -208,19 +209,41 @@
                 <div class="control-panel">
                     <h3>Build & Zip dApp</h3>
                     <div class="form-row">
+                        <label>ADB Path (for Android builds):</label>
+                        <div class="input-group">
+                            <input type="text" id="config-adb-path" value="adb" class="command-input"
+                                placeholder="adb or /path/to/android-sdk/platform-tools/adb">
+                            <button class="btn btn-neutral browse-btn" data-target="config-adb-path"
+                                data-type="file">Browse...</button>
+                            <button id="save-adb-config-btn" class="btn btn-primary">Save</button>
+                        </div>
+                        <small style="color: #888; display: block; margin-top: 5px;">
+                            Default: "adb" (uses system PATH). Common location: ~/Android/Sdk/platform-tools/adb
+                        </small>
+                    </div>
+                    <div class="form-row">
                         <label>Build Workspace:</label>
                         <div class="input-group">
                             <input type="text" id="build-workspace-path" class="command-input" readonly>
                             <button class="btn btn-neutral browse-btn" data-target="config-project-path" data-type="dir"
-                                title="Change Project Path in Config">Change...</button>
+                                title="Change Project Path in Config">Browse...</button>
                         </div>
                     </div>
-                    <p class="description">Runs <code>npm run generate:routes</code>, <code>npm run build</code> and
-                        <code>npm run minima:zip</code> in the configured
-                        workspace.</p>
+                    <p class="description"><strong>Run & Zip:</strong> Runs <code>npm run generate:routes</code>,
+                        <code>npm run build</code> and
+                        <code>npm run minima:zip</code> in the configured workspace to create a MiniDapp package.
+                    </p>
+                    <p class="description"><strong>Build & Install Android APK:</strong> Cleans old builds, runs
+                        <code>npm run build</code>,
+                        <code>npx cap sync android</code>, <code>./gradlew clean assembleDebug</code>, uninstalls old
+                        version and
+                        installs the new APK via <code>adb install -r</code>. Complete clean build process.
+                    </p>
                     <div class="button-group">
                         <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Run
                             & Zip</button>
+                        <button id="build-android-btn" class="btn btn-green"
+                            style="background-color: #3ddc84; color: #000;">Build & Install Android APK</button>
                     </div>
                     <div class="build-output-container">
                         <div class="output-header">
