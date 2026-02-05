@@ -30,7 +30,10 @@ let globalConfig = {
     dappName: 'MetaChain',
     envPath: '/home/joanramon/Minima/metachain/.env',
     dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
-    adbPath: 'adb' // Default to 'adb' in PATH, or full path like ~/Android/Sdk/platform-tools/adb
+    adbPath: 'adb', // Default to 'adb' in PATH, or full path like ~/Android/Sdk/platform-tools/adb
+    apkInstallPath: '',
+    adbPushPath: '',
+    adbPushRemotePath: '/sdcard/Download/'
 };
 
 // Load Config from File
@@ -47,8 +50,9 @@ if (fs.existsSync(CONFIG_FILE)) {
 
 function saveConfig() {
     try {
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(globalConfig, null, 2), 'utf-8');
-        console.log('Configuration saved to config.json');
+        const data = JSON.stringify(globalConfig, null, 2);
+        fs.writeFileSync(CONFIG_FILE, data, 'utf-8');
+        console.log('[Config] Saved to config.json:', data);
     } catch (e) {
         console.error('Failed to save configuration:', e);
     }
@@ -228,11 +232,16 @@ io.on('connection', (socket) => {
 
     // Config Update Handler
     socket.on('update-config', (newConfig) => {
+        // Log incoming update
+        console.log('[Config] Incoming update from client:', JSON.stringify(newConfig));
+
+        // Deep merge or at least ensure new keys are preserved
         globalConfig = { ...globalConfig, ...newConfig };
+
         saveConfig();
         // Broadcast the update back to all clients so they stay in sync
         io.emit('config-update', globalConfig);
-        io.emit('global-log', `[Server] Config updated & saved: Project Root = ${globalConfig.projectPath}`);
+        io.emit('global-log', `[Server] Config updated & saved: ADB Path = ${globalConfig.adbPath}`);
     });
 
     socket.on('export-env', async (data) => {
@@ -401,7 +410,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const runningNodeId = Object.keys(nodeProcesses).find(id => nodeProcesses[id]);
 
         if (!runningNodeId) {
-            io.emit('dapp-log', '[Error] No nodes are running. Start a node to fetch dApps.');
+            // io.emit('dapp-log', '[Error] No nodes are running. Start a node to fetch dApps.');
             io.emit('dapp-list', []);
             return;
         }
@@ -749,6 +758,11 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             return;
         }
 
+        // Update and save config
+        globalConfig.apkInstallPath = filePath;
+        saveConfig();
+        io.emit('config-update', globalConfig);
+
         io.emit('build-output', `[System] Installing APK: ${filePath}\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
 
@@ -768,6 +782,45 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
                 io.emit('build-output', `✅ APK installed successfully!\n`);
             } else {
                 io.emit('build-output', `❌ Installation failed.\n`);
+            }
+            io.emit('build-complete', { success: code === 0 });
+        });
+    });
+
+    socket.on('run-adb-push', (data) => {
+        const { localPath, remotePath } = data;
+        const adb = globalConfig.adbPath || 'adb';
+
+        if (!localPath || !remotePath) {
+            io.emit('build-output', '[Error] Missing local path or remote destination for ADB Push.\n');
+            return;
+        }
+
+        // Update and save config
+        globalConfig.adbPushPath = localPath;
+        globalConfig.adbPushRemotePath = remotePath;
+        saveConfig();
+        io.emit('config-update', globalConfig);
+
+        io.emit('build-output', `[System] Pushing file: ${localPath} -> ${remotePath}\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+
+        const push = spawn(adb, ['push', localPath, remotePath]);
+
+        push.stdout.on('data', (data) => {
+            io.emit('build-output', data.toString());
+        });
+
+        push.stderr.on('data', (data) => {
+            io.emit('build-output', `[stderr] ${data.toString()}`);
+        });
+
+        push.on('close', (code) => {
+            io.emit('build-output', `\n[System] ADB push exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `✅ File pushed successfully!\n`);
+            } else {
+                io.emit('build-output', `❌ Push failed.\n`);
             }
             io.emit('build-complete', { success: code === 0 });
         });

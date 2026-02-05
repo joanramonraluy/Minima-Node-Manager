@@ -171,6 +171,31 @@
                     </p>
                 </div>
 
+                <div class="control-panel" style="margin-top: 20px;">
+                    <h3>File Push (ADB Push)</h3>
+                    <div class="form-row">
+                        <label>Select Local File:</label>
+                        <div class="input-group">
+                            <input type="text" id="adb-push-local-input" class="command-input"
+                                placeholder="/path/to/local/file">
+                            <button class="btn btn-neutral browse-btn" data-target="adb-push-local-input"
+                                data-type="file">Browse...</button>
+                        </div>
+                    </div>
+                    <div class="form-row" style="margin-top: 10px;">
+                        <label>Remote Destination:</label>
+                        <div class="input-group">
+                            <input type="text" id="adb-push-remote-input" class="command-input"
+                                value="/sdcard/Download/" placeholder="/sdcard/Download/">
+                            <button id="adb-push-btn" class="btn btn-purple" style="background-color: #7209b7;">Push
+                                File</button>
+                        </div>
+                    </div>
+                    <p class="description" style="color: #888; font-size: 0.9rem; margin-top: 5px;">
+                        Pushes a local file to the specified location on the connected Android device.
+                    </p>
+                </div>
+
                 <div class="control-panel">
                     <h3>Batch dApp Management</h3>
 

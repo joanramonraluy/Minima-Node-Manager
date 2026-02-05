@@ -461,7 +461,10 @@ let globalConfig = {
     dappName: 'MetaChain',
     envPath: '/home/joanramon/Minima/metachain/.env',
     dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
-    adbPath: 'adb'
+    adbPath: 'adb',
+    apkInstallPath: '',
+    adbPushPath: '',
+    adbPushRemotePath: '/sdcard/Download/'
 };
 
 // Listen for Config from Server
@@ -473,10 +476,22 @@ socket.on('config-update', (config) => {
     if (configDappNameInput) configDappNameInput.value = globalConfig.dappName;
     if (configEnvPathInput) configEnvPathInput.value = globalConfig.envPath;
     if (configAdbPathInput) configAdbPathInput.value = globalConfig.adbPath || 'adb';
-    if (dappLocationConfigInput) dappLocationConfigInput.value = globalConfig.dappLocation;
+
+    const dappLocationInput = document.getElementById('dapp-location-config');
+    if (dappLocationInput) dappLocationInput.value = globalConfig.dappLocation;
 
     // Also update build workspace path if it exists
-    if (buildWorkspacePathInput) buildWorkspacePathInput.value = globalConfig.projectPath;
+    const buildWorkspaceInput = document.getElementById('build-workspace-path');
+    if (buildWorkspaceInput) buildWorkspaceInput.value = globalConfig.projectPath;
+
+    // Update APK Install and ADB Push paths
+    const apkLocationInput = document.getElementById('apk-location-input');
+    const adbPushLocalInput = document.getElementById('adb-push-local-input');
+    const adbPushRemoteInput = document.getElementById('adb-push-remote-input');
+
+    if (apkLocationInput) apkLocationInput.value = globalConfig.apkInstallPath || '';
+    if (adbPushLocalInput) adbPushLocalInput.value = globalConfig.adbPushPath || '';
+    if (adbPushRemoteInput) adbPushRemoteInput.value = globalConfig.adbPushRemotePath || '/sdcard/Download/';
 
     // Log only if it seems like a new update (to avoid log spam on connect)
     // addToGlobalLog('[System] Configuration synced from server.');
@@ -706,6 +721,34 @@ if (apkInstallBtn) {
     });
 }
 
+// ADB Push
+let isAdbPushing = false;
+const adbPushLocalInput = document.getElementById('adb-push-local-input');
+const adbPushRemoteInput = document.getElementById('adb-push-remote-input');
+const adbPushBtn = document.getElementById('adb-push-btn');
+
+if (adbPushBtn) {
+    adbPushBtn.onclick = () => {
+        const localPath = adbPushLocalInput.value.trim();
+        const remotePath = adbPushRemoteInput.value.trim();
+        if (localPath && remotePath) {
+            const dappLog = document.getElementById('dapp-log');
+            if (dappLog) dappLog.textContent = `Starting ADB Push: ${localPath} -> ${remotePath}...\n`;
+
+            isAdbPushing = true;
+            adbPushBtn.disabled = true;
+            socket.emit('run-adb-push', { localPath, remotePath });
+        } else {
+            alert('Please select a local file and enter a remote destination.');
+        }
+    };
+
+    socket.on('build-complete', () => {
+        if (adbPushBtn) adbPushBtn.disabled = false;
+        isAdbPushing = false;
+    });
+}
+
 // Auto-refresh on dropdown interaction
 if (dappSelect) {
     // We use 'mousedown' to trigger before the menu opens, though standard selects are tricky.
@@ -791,8 +834,8 @@ socket.on('build-output', (data) => {
     // Auto scroll
     buildOutputObj.scrollTop = buildOutputObj.scrollHeight;
 
-    // Mirror to dApp log if APK is installing
-    if (isApkInstalling) {
+    // Mirror to dApp log if APK is installing or ADB push is running
+    if (isApkInstalling || isAdbPushing) {
         const dappLog = document.getElementById('dapp-log');
         if (dappLog) {
             dappLog.textContent += data;
@@ -947,6 +990,14 @@ function confirmSelection() {
         globalConfig.dappLocation = targetInput.value;
     }
 
+    if (fpTargetInputId === 'apk-location-input') {
+        globalConfig.apkInstallPath = targetInput.value;
+    }
+
+    if (fpTargetInputId === 'adb-push-local-input') {
+        globalConfig.adbPushPath = targetInput.value;
+    }
+
     // Auto-save automatically when using file picker
     socket.emit('update-config', globalConfig);
 }
@@ -967,6 +1018,9 @@ setupAutoSave('config-project-path', 'projectPath');
 setupAutoSave('config-dapp-name', 'dappName');
 setupAutoSave('config-env-path', 'envPath');
 setupAutoSave('dapp-location-config', 'dappLocation');
+setupAutoSave('apk-location-input', 'apkInstallPath');
+setupAutoSave('adb-push-local-input', 'adbPushPath');
+setupAutoSave('adb-push-remote-input', 'adbPushRemotePath');
 
 fpCancelBtn.onclick = () => {
     filePickerModal.style.display = 'none';
