@@ -680,6 +680,32 @@ batchUninstallBtn.onclick = () => {
     }
 };
 
+// Generic APK Install
+let isApkInstalling = false;
+const apkLocationInput = document.getElementById('apk-location-input');
+const apkInstallBtn = document.getElementById('apk-install-btn');
+
+if (apkInstallBtn) {
+    apkInstallBtn.onclick = () => {
+        const filePath = apkLocationInput.value.trim();
+        if (filePath) {
+            const dappLog = document.getElementById('dapp-log');
+            if (dappLog) dappLog.textContent = `Starting APK installation: ${filePath}...\n`;
+
+            isApkInstalling = true;
+            apkInstallBtn.disabled = true;
+            socket.emit('run-adb-install', { filePath });
+        } else {
+            alert('Please select or enter an APK file path.');
+        }
+    };
+
+    socket.on('build-complete', () => {
+        if (apkInstallBtn) apkInstallBtn.disabled = false;
+        isApkInstalling = false;
+    });
+}
+
 // Auto-refresh on dropdown interaction
 if (dappSelect) {
     // We use 'mousedown' to trigger before the menu opens, though standard selects are tricky.
@@ -722,6 +748,7 @@ if (buildZipBtn) {
         buildOutputObj.textContent = 'Starting Build & Zip process...\n';
         buildZipBtn.disabled = true;
         if (buildAndroidBtn) buildAndroidBtn.disabled = true;
+        if (buildFullBtn) buildFullBtn.disabled = true;
         socket.emit('run-build-zip');
     };
 }
@@ -731,7 +758,19 @@ if (buildAndroidBtn) {
         buildOutputObj.textContent = 'Starting Android Build & Install process (Build -> Sync -> AssembleDebug -> ADB Install)...\n';
         buildAndroidBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
+        if (buildFullBtn) buildFullBtn.disabled = true;
         socket.emit('run-android-build');
+    };
+}
+
+const buildFullBtn = document.getElementById('build-full-btn');
+if (buildFullBtn) {
+    buildFullBtn.onclick = () => {
+        buildOutputObj.textContent = 'Starting FULL Build & Install process (MiniDapp + Android APK)...\n';
+        buildFullBtn.disabled = true;
+        if (buildZipBtn) buildZipBtn.disabled = true;
+        if (buildAndroidBtn) buildAndroidBtn.disabled = true;
+        socket.emit('run-full-build');
     };
 }
 
@@ -751,11 +790,21 @@ socket.on('build-output', (data) => {
     buildOutputObj.textContent += data;
     // Auto scroll
     buildOutputObj.scrollTop = buildOutputObj.scrollHeight;
+
+    // Mirror to dApp log if APK is installing
+    if (isApkInstalling) {
+        const dappLog = document.getElementById('dapp-log');
+        if (dappLog) {
+            dappLog.textContent += data;
+            dappLog.scrollTop = dappLog.scrollHeight;
+        }
+    }
 });
 
 socket.on('build-complete', (data) => {
     if (buildZipBtn) buildZipBtn.disabled = false;
     if (buildAndroidBtn) buildAndroidBtn.disabled = false;
+    if (buildFullBtn) buildFullBtn.disabled = false;
     const { success } = data;
     buildOutputObj.textContent += `\n=== Process ${success ? 'Completed Successfully' : 'Failed'} ===\n`;
 });

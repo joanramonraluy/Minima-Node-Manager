@@ -692,6 +692,87 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         });
     });
 
+    socket.on('run-full-build', () => {
+        const cwd = globalConfig.projectPath;
+        const adb = globalConfig.adbPath || 'adb';
+        io.emit('build-output', `[System] Starting FULL Build & Install (MiniDapp + Android) in ${cwd}...\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+
+        const commands = [
+            'echo "🛠️  Generating routes..."',
+            'npm run generate:routes',
+            'echo "🤐 Creating MiniDapp zip (includes build)..."',
+            'npm run minima:zip',
+            'echo "🧹 Cleaning Android assets..."',
+            'rm -rf android/app/src/main/assets/public',
+            'rm -rf android/app/build',
+            'echo "🔄 Syncing with Capacitor..."',
+            'npx cap sync android',
+            'echo "🏗️  Building APK..."',
+            'cd android && ./gradlew clean assembleDebug && cd ..',
+            'echo "📱 Uninstalling old version..."',
+            `${adb} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
+            'echo "📲 Installing APK..."',
+            `${adb} install -r android/app/build/outputs/apk/debug/app-debug.apk`
+        ].join(' && ');
+
+        const build = spawn(commands, {
+            cwd,
+            shell: true
+        });
+
+        build.stdout.on('data', (data) => {
+            io.emit('build-output', data.toString());
+        });
+
+        build.stderr.on('data', (data) => {
+            io.emit('build-output', `[stderr] ${data.toString()}`);
+        });
+
+        build.on('close', (code) => {
+            io.emit('build-output', `\n[System] Process exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `\n✅ Full build and install completed successfully!\n`);
+            } else {
+                io.emit('build-output', `\n❌ Process failed. Check output above for details.\n`);
+            }
+            io.emit('build-complete', { success: code === 0 });
+        });
+    });
+
+    socket.on('run-adb-install', (data) => {
+        const { filePath } = data;
+        const adb = globalConfig.adbPath || 'adb';
+
+        if (!filePath) {
+            io.emit('build-output', '[Error] No APK file path provided.\n');
+            return;
+        }
+
+        io.emit('build-output', `[System] Installing APK: ${filePath}\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+
+        const install = spawn(adb, ['install', '-r', filePath]);
+
+        install.stdout.on('data', (data) => {
+            io.emit('build-output', data.toString());
+        });
+
+        install.stderr.on('data', (data) => {
+            io.emit('build-output', `[stderr] ${data.toString()}`);
+        });
+
+        install.on('close', (code) => {
+            io.emit('build-output', `\n[System] ADB install exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `✅ APK installed successfully!\n`);
+            } else {
+                io.emit('build-output', `❌ Installation failed.\n`);
+            }
+            io.emit('build-complete', { success: code === 0 });
+        });
+    });
+
 
 });
 
