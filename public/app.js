@@ -810,7 +810,7 @@ if (buildZipBtn) {
 if (buildAndroidBtn) {
     buildAndroidBtn.onclick = () => {
         const deviceId = getSelectedAdbDevice('build');
-        buildOutputObj.textContent = 'Starting Android Build & Install process (Build -> Sync -> AssembleDebug -> ADB Install)...\n';
+        buildOutputObj.textContent = 'Starting Refined Android Build & Install process (Clean Pipeline)...\n';
         buildAndroidBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildFullBtn) buildFullBtn.disabled = true;
@@ -822,7 +822,7 @@ const buildFullBtn = document.getElementById('build-full-btn');
 if (buildFullBtn) {
     buildFullBtn.onclick = () => {
         const deviceId = getSelectedAdbDevice('build');
-        buildOutputObj.textContent = 'Starting FULL Build & Install process (MiniDapp + Android APK)...\n';
+        buildOutputObj.textContent = 'Starting Refined Build All process (Clean Pipeline: MiniDapp + Android)...\n';
         buildFullBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildAndroidBtn) buildAndroidBtn.disabled = true;

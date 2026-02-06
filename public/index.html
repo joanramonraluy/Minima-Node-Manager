@@ -314,19 +314,14 @@
                                 title="Change Project Path in Config">Browse...</button>
                         </div>
                     </div>
-                    <p class="description"><strong>Build & Zip:</strong> Runs <code>npm run generate:routes</code>,
-                        <code>npm run build</code> and
-                        <code>npm run minima:zip</code> in the configured workspace to create a MiniDapp package.
+                    <p class="description"><strong>Build & Zip:</strong> Generates routes and creates the MiniDapp ZIP
+                        package (<code>.mds</code>).
                     </p>
-                    <p class="description"><strong>Build & Install Android APK:</strong> Cleans old builds, runs
-                        <code>npm run build</code>,
-                        <code>npx cap sync android</code>, <code>./gradlew clean assembleDebug</code>, uninstalls old
-                        version and
-                        installs the new APK via <code>adb install -r</code>. Complete clean build process.
+                    <p class="description"><strong>Build & Install Android APK:</strong> Compiles the project and
+                        installs the debug APK on the selected device.
                     </p>
-                    <p class="description"><strong>Build All & Zip & Install:</strong> Performs the complete workflow:
-                        generates routes, builds web assets, creates the MiniDapp zip, and finally builds and installs
-                        the Android APK.
+                    <p class="description"><strong>Build All & Zip & Install:</strong> Complete deterministic pipeline
+                        that builds both the MiniDapp and the APK, ensuring everything is in sync.
                     </p>
                     <div class="button-group">
                         <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Build

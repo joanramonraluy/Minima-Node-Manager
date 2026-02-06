@@ -664,32 +664,17 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const { deviceId } = data || {};
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
-        const adbPrefix = deviceId ? `${adb} -s ${deviceId}` : adb;
 
-        io.emit('build-output', `[System] Starting Clean Android Build & Install in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n`);
-        io.emit('build-output', `[System] This will clean old builds and rebuild everything from scratch\n\n`);
+        io.emit('build-output', `[System] This will perform a clean, deterministic build of the Android APK.\n\n`);
 
-        // Multi-step build process with clean
-        const commands = [
-            'echo "🧹 Cleaning old builds..."',
-            'rm -rf build',
-            'rm -rf android/app/src/main/assets/public',
-            'rm -rf android/app/build',
-            'echo "📦 Building web assets..."',
-            'npm run build',
-            'echo "🔄 Syncing with Capacitor..."',
-            'npx cap sync android',
-            'echo "🏗️  Building APK..."',
-            'cd android && ./gradlew clean assembleDebug && cd ..',
-            'echo "📱 Uninstalling old version..."',
-            `${adbPrefix} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
-            'echo "📲 Installing APK..."',
-            `${adbPrefix} install -r android/app/build/outputs/apk/debug/app-debug.apk`
-        ].join(' && ');
+        // Execute the unified build script
+        const scriptPath = './scripts/build_android_clean.sh';
+        const command = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
 
-        const build = spawn(commands, {
+        const build = spawn(command, {
             cwd,
             shell: true
         });
@@ -718,31 +703,16 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const { deviceId } = data || {};
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
-        const adbPrefix = deviceId ? `${adb} -s ${deviceId}` : adb;
 
-        io.emit('build-output', `[System] Starting FULL Build & Install (MiniDapp + Android) in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
 
-        const commands = [
-            'echo "🛠️  Generating routes..."',
-            'npm run generate:routes',
-            'echo "🤐 Creating MiniDapp zip (includes build)..."',
-            'npm run minima:zip',
-            'echo "🧹 Cleaning Android assets..."',
-            'rm -rf android/app/src/main/assets/public',
-            'rm -rf android/app/build',
-            'echo "🔄 Syncing with Capacitor..."',
-            'npx cap sync android',
-            'echo "🏗️  Building APK..."',
-            'cd android && ./gradlew clean assembleDebug && cd ..',
-            'echo "📱 Uninstalling old version..."',
-            `${adbPrefix} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
-            'echo "📲 Installing APK..."',
-            `${adbPrefix} install -r android/app/build/outputs/apk/debug/app-debug.apk`
-        ].join(' && ');
+        // Execute the unified build script
+        const scriptPath = './scripts/build_android_clean.sh';
+        const command = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
 
-        const build = spawn(commands, {
+        const build = spawn(command, {
             cwd,
             shell: true
         });
