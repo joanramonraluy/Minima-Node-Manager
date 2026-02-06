@@ -1350,7 +1350,9 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
 // ADB Device Management
 socket.on('adb-device-list', (devices) => {
     document.querySelectorAll('.adb-device-select').forEach(select => {
-        const currentVal = select.value;
+        const context = select.id.endsWith('dapps') ? 'dapps' : 'build';
+        const savedDevice = localStorage.getItem(`selected-adb-device-${context}`);
+        const currentVal = select.value || savedDevice;
         const isManual = (currentVal === 'manual');
 
         select.innerHTML = `
@@ -1365,13 +1367,19 @@ socket.on('adb-device-list', (devices) => {
             select.appendChild(option);
         });
 
-        // Restore value or auto-select if only one device (and not in manual mode)
+        // Restore value: 1. Manual mode, 2. Previously selected/saved ID, 3. Auto-select if only 1 device
         if (isManual) {
             select.value = 'manual';
-        } else if (devices.length === 1) {
-            select.value = devices[0].id;
         } else if (currentVal && devices.some(d => d.id === currentVal)) {
             select.value = currentVal;
+        } else if (devices.length === 1) {
+            select.value = devices[0].id;
+        }
+
+        // Ensure manual container visibility is correct after refresh
+        const container = document.getElementById(`manual-device-id-container-${context}`);
+        if (container) {
+            container.style.display = (select.value === 'manual') ? 'flex' : 'none';
         }
     });
 
@@ -1392,13 +1400,19 @@ function getSelectedAdbDevice(context) {
     return select.value || null;
 }
 
-// Toggle manual input visibility
+// Toggle manual input visibility & save selection
 document.querySelectorAll('.adb-device-select').forEach(select => {
     select.addEventListener('change', () => {
         const context = select.id.endsWith('dapps') ? 'dapps' : 'build';
         const container = document.getElementById(`manual-device-id-container-${context}`);
         if (container) {
             container.style.display = (select.value === 'manual') ? 'flex' : 'none';
+        }
+        // Persist selection
+        if (select.value && select.value !== 'manual') {
+            localStorage.setItem(`selected-adb-device-${context}`, select.value);
+        } else if (select.value === '') {
+            localStorage.removeItem(`selected-adb-device-${context}`);
         }
     });
 });

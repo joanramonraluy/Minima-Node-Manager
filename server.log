@@ -1,27 +1,20 @@
 Loaded configuration from config.json
-node:events:497
-      throw er; // Unhandled 'error' event
-      ^
+Server running at http://localhost:3000
+Remember to connect to: http://localhost:3000
+Running Auto Network Setup...
+Opening browser at http://localhost:3000...
+Opening browser at http://localhost:3000...
+[ADB] Fetching devices using path: /home/joanramon/Android/Sdk/platform-tools/adb
+[ADB] devices output:
+List of devices attached
+1dd244d9	device
 
-Error: listen EADDRINUSE: address already in use :::3000
-    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
-    at listenInCluster (node:net:1997:12)
-    at Server.listen (node:net:2102:7)
-    at Object.<anonymous> (/home/joanramon/Minima/MinimaNodeManager/server.js:922:8)
-    at Module._compile (node:internal/modules/cjs/loader:1706:14)
-    at Module._extensions..js (node:internal/modules/cjs/loader:1839:10)
-    at Module.load (node:internal/modules/cjs/loader:1441:32)
-    at Module._load (node:internal/modules/cjs/loader:1263:12)
-    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
-Emitted 'error' event on Server instance at:
-    at emitErrorNT (node:net:1976:8)
-    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
-  code: 'EADDRINUSE',
-  errno: -98,
-  syscall: 'listen',
-  address: '::',
-  port: 3000
-}
 
-Node.js v22.22.0
+[ADB] Found 1 devices: [{"id":"1dd244d9","status":"device"}]
+[ADB] Fetching devices using path: /home/joanramon/Android/Sdk/platform-tools/adb
+[ADB] devices output:
+List of devices attached
+1dd244d9	device
+
+
+[ADB] Found 1 devices: [{"id":"1dd244d9","status":"device"}]

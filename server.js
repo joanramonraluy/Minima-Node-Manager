@@ -667,7 +667,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
         io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
-        if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n`);
+        io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n`);
         io.emit('build-output', `[System] This will perform a clean, deterministic build of the Android APK.\n\n`);
 
         // Execute the unified build script
@@ -706,7 +706,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
         io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
-        if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
+        io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n\n`);
 
         // Execute the unified build script
         const scriptPath = './scripts/build_android_clean.sh';
