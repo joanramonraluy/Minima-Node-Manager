@@ -154,6 +154,29 @@
             <!-- Tab Content: dApp Manager -->
             <div id="tab-dapps" class="tab-content">
                 <div class="control-panel" style="margin-bottom: 20px;">
+                    <h3>ADB Device Selection</h3>
+                    <div class="form-row">
+                        <label for="adb-device-select-dapps">Target Device:</label>
+                        <div class="input-group">
+                            <select id="adb-device-select-dapps" class="command-input adb-device-select"
+                                style="flex: 1;">
+                                <option value="">Auto (single device)</option>
+                                <option value="manual">-- Enter Manually --</option>
+                            </select>
+                            <button class="btn btn-secondary refresh-adb-devices-btn">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="manual-device-id-container-dapps" class="form-row"
+                        style="margin-top: 10px; display: none;">
+                        <label for="manual-device-id-dapps">Device Serial:</label>
+                        <input type="text" id="manual-device-id-dapps" class="command-input"
+                            placeholder="e.g. emulator-5554">
+                    </div>
+                </div>
+
+                <div class="control-panel" style="margin-bottom: 20px;">
                     <h3>Generic APK Installation (ADB)</h3>
                     <div class="form-row">
                         <label>Select APK File:</label>
@@ -251,6 +274,25 @@
             <div id="tab-build" class="tab-content">
                 <div class="control-panel">
                     <h3>Build & Zip dApp</h3>
+                    <div class="form-row">
+                        <label for="adb-device-select-build">Target ADB Device:</label>
+                        <div class="input-group">
+                            <select id="adb-device-select-build" class="command-input adb-device-select"
+                                style="flex: 1;">
+                                <option value="">Auto (single device)</option>
+                                <option value="manual">-- Enter Manually --</option>
+                            </select>
+                            <button class="btn btn-secondary refresh-adb-devices-btn">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="manual-device-id-container-build" class="form-row"
+                        style="margin-top: 10px; display: none;">
+                        <label for="manual-device-id-build">Device Serial:</label>
+                        <input type="text" id="manual-device-id-build" class="command-input"
+                            placeholder="e.g. emulator-5554">
+                    </div>
                     <div class="form-row">
                         <label>ADB Path (for Android builds):</label>
                         <div class="input-group">

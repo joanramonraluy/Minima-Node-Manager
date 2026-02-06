@@ -632,7 +632,8 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         io.emit('build-output', `[System] Starting 'npm run build && npm run minima:zip' in ${cwd}...\n`);
 
         // Run as a shell command to allow chaining &&
-        const build = spawn('npm run generate:routes && npm run build && npm run minima:zip', {
+        // Removed redundant 'npm run build' as 'npm run minima:zip' already includes it
+        const build = spawn('npm run generate:routes && npm run minima:zip', {
             cwd,
             shell: true
         });
@@ -647,15 +648,27 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
         build.on('close', (code) => {
             io.emit('build-output', `\n[System] Process exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `\n✅ Build & Zip Summary:\n`);
+                io.emit('build-output', `  - Routes generated\n`);
+                io.emit('build-output', `  - MiniDapp built & zipped\n`);
+                io.emit('build-output', `\n✨ All steps completed successfully!\n`);
+            } else {
+                io.emit('build-output', `\n❌ Process failed. Summary check showed errors.\n`);
+            }
             io.emit('build-complete', { success: code === 0 });
         });
     });
 
-    socket.on('run-android-build', () => {
+    socket.on('run-android-build', (data) => {
+        const { deviceId } = data || {};
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
+        const adbPrefix = deviceId ? `${adb} -s ${deviceId}` : adb;
+
         io.emit('build-output', `[System] Starting Clean Android Build & Install in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n`);
         io.emit('build-output', `[System] This will clean old builds and rebuild everything from scratch\n\n`);
 
         // Multi-step build process with clean
@@ -671,9 +684,9 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             'echo "🏗️  Building APK..."',
             'cd android && ./gradlew clean assembleDebug && cd ..',
             'echo "📱 Uninstalling old version..."',
-            `${adb} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
+            `${adbPrefix} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
             'echo "📲 Installing APK..."',
-            `${adb} install -r android/app/build/outputs/apk/debug/app-debug.apk`
+            `${adbPrefix} install -r android/app/build/outputs/apk/debug/app-debug.apk`
         ].join(' && ');
 
         const build = spawn(commands, {
@@ -701,11 +714,15 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         });
     });
 
-    socket.on('run-full-build', () => {
+    socket.on('run-full-build', (data) => {
+        const { deviceId } = data || {};
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
+        const adbPrefix = deviceId ? `${adb} -s ${deviceId}` : adb;
+
         io.emit('build-output', `[System] Starting FULL Build & Install (MiniDapp + Android) in ${cwd}...\n`);
-        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        if (deviceId) io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
 
         const commands = [
             'echo "🛠️  Generating routes..."',
@@ -720,9 +737,9 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             'echo "🏗️  Building APK..."',
             'cd android && ./gradlew clean assembleDebug && cd ..',
             'echo "📱 Uninstalling old version..."',
-            `${adb} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
+            `${adbPrefix} uninstall com.metachain.app 2>/dev/null || echo "  (No previous version found)"`,
             'echo "📲 Installing APK..."',
-            `${adb} install -r android/app/build/outputs/apk/debug/app-debug.apk`
+            `${adbPrefix} install -r android/app/build/outputs/apk/debug/app-debug.apk`
         ].join(' && ');
 
         const build = spawn(commands, {
@@ -741,16 +758,75 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         build.on('close', (code) => {
             io.emit('build-output', `\n[System] Process exited with code ${code}\n`);
             if (code === 0) {
-                io.emit('build-output', `\n✅ Full build and install completed successfully!\n`);
+                io.emit('build-output', `\n✅ FULL Build & Install Summary:\n`);
+                io.emit('build-output', `  - Routes generated\n`);
+                io.emit('build-output', `  - MiniDapp built & zipped\n`);
+                io.emit('build-output', `  - Web assets synced to Android\n`);
+                io.emit('build-output', `  - Android APK generated\n`);
+                io.emit('build-output', `  - APK installed on device\n`);
+                io.emit('build-output', `\n✨ FULL process completed successfully!\n`);
             } else {
-                io.emit('build-output', `\n❌ Process failed. Check output above for details.\n`);
+                io.emit('build-output', `\n❌ FULL Build failed. Review the step-by-step logs.\n`);
             }
             io.emit('build-complete', { success: code === 0 });
         });
     });
 
+    socket.on('get-adb-devices', () => {
+        const adb = globalConfig.adbPath || 'adb';
+        console.log(`[ADB] Fetching devices using path: ${adb}`);
+
+        // Pass HOME env variable so ADB can find its config/keys
+        const adbEnv = { ...process.env };
+        if (process.env.SUDO_USER) {
+            adbEnv.HOME = `/home/${process.env.SUDO_USER}`;
+        } else {
+            adbEnv.HOME = '/root';
+        }
+
+        const deviceList = spawn(adb, ['devices'], { env: adbEnv });
+
+        let stdout = '';
+        let stderr = '';
+        deviceList.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+        deviceList.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        deviceList.on('close', (code) => {
+            if (code === 0) {
+                console.log(`[ADB] devices output:\n${stdout}`);
+                if (stderr) console.log(`[ADB] devices stderr:\n${stderr}`);
+
+                // Parse device list
+                const lines = stdout.split('\n').filter(line => line.trim());
+
+                // Robust parsing: Look for lines with tabs, which indicate a device serial and status
+                const devices = lines
+                    .filter(line => line.includes('\t'))
+                    .map(line => {
+                        const [id, status] = line.split('\t');
+                        return { id: id.trim(), status: status.trim() };
+                    });
+
+                console.log(`[ADB] Found ${devices.length} devices:`, JSON.stringify(devices));
+                io.emit('adb-device-list', devices);
+
+                if (devices.length === 0) {
+                    io.emit('global-log', `[ADB] No devices found. Check if they are connected and 'adb devices' works manually.`);
+                }
+            } else {
+                console.error(`[ADB] devices failed with code ${code}. Stderr: ${stderr}`);
+                io.emit('adb-device-list', []);
+                io.emit('global-log', `[ADB] Error listing devices (code ${code}): ${stderr || 'Unknown error'}`);
+            }
+        });
+    });
+
     socket.on('run-adb-install', (data) => {
-        const { filePath } = data;
+        const { filePath, deviceId } = data;
         const adb = globalConfig.adbPath || 'adb';
 
         if (!filePath) {
@@ -764,9 +840,15 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         io.emit('config-update', globalConfig);
 
         io.emit('build-output', `[System] Installing APK: ${filePath}\n`);
-        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        if (deviceId) {
+            io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
+        } else {
+            io.emit('build-output', `[System] Target Device: Auto\n\n`);
+        }
 
-        const install = spawn(adb, ['install', '-r', filePath]);
+        const args = deviceId ? ['-s', deviceId, 'install', '-r', filePath] : ['install', '-r', filePath];
+        const install = spawn(adb, args);
 
         install.stdout.on('data', (data) => {
             io.emit('build-output', data.toString());
@@ -779,16 +861,18 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         install.on('close', (code) => {
             io.emit('build-output', `\n[System] ADB install exited with code ${code}\n`);
             if (code === 0) {
-                io.emit('build-output', `✅ APK installed successfully!\n`);
+                io.emit('build-output', `\n✅ ADB Install Summary:\n`);
+                io.emit('build-output', `  - APK installed successfully to device\n`);
+                io.emit('build-output', `\n✨ ADB Install completed successfully!\n`);
             } else {
-                io.emit('build-output', `❌ Installation failed.\n`);
+                io.emit('build-output', `\n❌ ADB Install failed. Check the logs above.\n`);
             }
             io.emit('build-complete', { success: code === 0 });
         });
     });
 
     socket.on('run-adb-push', (data) => {
-        const { localPath, remotePath } = data;
+        const { localPath, remotePath, deviceId } = data;
         const adb = globalConfig.adbPath || 'adb';
 
         if (!localPath || !remotePath) {
@@ -803,9 +887,15 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         io.emit('config-update', globalConfig);
 
         io.emit('build-output', `[System] Pushing file: ${localPath} -> ${remotePath}\n`);
-        io.emit('build-output', `[System] Using ADB: ${adb}\n\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        if (deviceId) {
+            io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
+        } else {
+            io.emit('build-output', `[System] Target Device: Auto\n\n`);
+        }
 
-        const push = spawn(adb, ['push', localPath, remotePath]);
+        const args = deviceId ? ['-s', deviceId, 'push', localPath, remotePath] : ['push', localPath, remotePath];
+        const push = spawn(adb, args);
 
         push.stdout.on('data', (data) => {
             io.emit('build-output', data.toString());

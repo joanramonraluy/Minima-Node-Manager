@@ -113,6 +113,7 @@ window.openTab = function (evt, tabName) {
             // Trigger refresh regardless of button state
             if (typeof socket !== 'undefined') {
                 socket.emit('get-dapps');
+                socket.emit('get-adb-devices');
                 lastDAppSwitchTime = now;
             } else {
                 console.error("Socket not defined when trying to auto-refresh dApps");
@@ -125,6 +126,12 @@ window.openTab = function (evt, tabName) {
         const refreshBtn = document.getElementById('refresh-dapps-btn');
         if (refreshBtn) {
             refreshBtn.disabled = true;
+        }
+    }
+
+    if (tabName === 'tab-build') {
+        if (typeof socket !== 'undefined') {
+            socket.emit('get-adb-devices');
         }
     }
 };
@@ -703,13 +710,15 @@ const apkInstallBtn = document.getElementById('apk-install-btn');
 if (apkInstallBtn) {
     apkInstallBtn.onclick = () => {
         const filePath = apkLocationInput.value.trim();
+        const deviceId = getSelectedAdbDevice('dapps');
+
         if (filePath) {
             const dappLog = document.getElementById('dapp-log');
             if (dappLog) dappLog.textContent = `Starting APK installation: ${filePath}...\n`;
 
             isApkInstalling = true;
             apkInstallBtn.disabled = true;
-            socket.emit('run-adb-install', { filePath });
+            socket.emit('run-adb-install', { filePath, deviceId });
         } else {
             alert('Please select or enter an APK file path.');
         }
@@ -731,13 +740,15 @@ if (adbPushBtn) {
     adbPushBtn.onclick = () => {
         const localPath = adbPushLocalInput.value.trim();
         const remotePath = adbPushRemoteInput.value.trim();
+        const deviceId = getSelectedAdbDevice('dapps');
+
         if (localPath && remotePath) {
             const dappLog = document.getElementById('dapp-log');
             if (dappLog) dappLog.textContent = `Starting ADB Push: ${localPath} -> ${remotePath}...\n`;
 
             isAdbPushing = true;
             adbPushBtn.disabled = true;
-            socket.emit('run-adb-push', { localPath, remotePath });
+            socket.emit('run-adb-push', { localPath, remotePath, deviceId });
         } else {
             alert('Please select a local file and enter a remote destination.');
         }
@@ -798,22 +809,24 @@ if (buildZipBtn) {
 
 if (buildAndroidBtn) {
     buildAndroidBtn.onclick = () => {
+        const deviceId = getSelectedAdbDevice('build');
         buildOutputObj.textContent = 'Starting Android Build & Install process (Build -> Sync -> AssembleDebug -> ADB Install)...\n';
         buildAndroidBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildFullBtn) buildFullBtn.disabled = true;
-        socket.emit('run-android-build');
+        socket.emit('run-android-build', { deviceId });
     };
 }
 
 const buildFullBtn = document.getElementById('build-full-btn');
 if (buildFullBtn) {
     buildFullBtn.onclick = () => {
+        const deviceId = getSelectedAdbDevice('build');
         buildOutputObj.textContent = 'Starting FULL Build & Install process (MiniDapp + Android APK)...\n';
         buildFullBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildAndroidBtn) buildAndroidBtn.disabled = true;
-        socket.emit('run-full-build');
+        socket.emit('run-full-build', { deviceId });
     };
 }
 
@@ -1334,3 +1347,71 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
         if (globalConfigModal) globalConfigModal.style.display = 'none';
     };
 }
+// ADB Device Management
+socket.on('adb-device-list', (devices) => {
+    document.querySelectorAll('.adb-device-select').forEach(select => {
+        const currentVal = select.value;
+        const isManual = (currentVal === 'manual');
+
+        select.innerHTML = `
+            <option value="">Auto (single device)</option>
+            <option value="manual">-- Enter Manually --</option>
+        `;
+
+        devices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.id;
+            option.textContent = `${device.id} (${device.status})`;
+            select.appendChild(option);
+        });
+
+        // Restore value or auto-select if only one device (and not in manual mode)
+        if (isManual) {
+            select.value = 'manual';
+        } else if (devices.length === 1) {
+            select.value = devices[0].id;
+        } else if (currentVal && devices.some(d => d.id === currentVal)) {
+            select.value = currentVal;
+        }
+    });
+
+    if (devices.length > 0) {
+        addToGlobalLog(`[System] Found ${devices.length} ADB devices.`);
+    }
+});
+
+function getSelectedAdbDevice(context) {
+    const select = document.getElementById(`adb-device-select-${context}`);
+    if (!select) return null;
+
+    if (select.value === 'manual') {
+        const manualInput = document.getElementById(`manual-device-id-${context}`);
+        return manualInput ? manualInput.value.trim() : null;
+    }
+
+    return select.value || null;
+}
+
+// Toggle manual input visibility
+document.querySelectorAll('.adb-device-select').forEach(select => {
+    select.addEventListener('change', () => {
+        const context = select.id.endsWith('dapps') ? 'dapps' : 'build';
+        const container = document.getElementById(`manual-device-id-container-${context}`);
+        if (container) {
+            container.style.display = (select.value === 'manual') ? 'flex' : 'none';
+        }
+    });
+});
+
+document.querySelectorAll('.refresh-adb-devices-btn').forEach(btn => {
+    btn.onclick = () => {
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = '🔄...';
+        socket.emit('get-adb-devices');
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }, 1000);
+    };
+});
