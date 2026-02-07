@@ -110,6 +110,13 @@
                                 data-type="file">Browse...</button>
                         </div>
                     </div>
+                    <div class="form-row">
+                        <label for="config-mobile-package-name">Mobile Package Name:</label>
+                        <div class="input-group">
+                            <input type="text" id="config-mobile-package-name" value="com.minima.android"
+                                class="command-input" style="width: 100%;">
+                        </div>
+                    </div>
 
                     <div style="text-align: right; margin-top: 10px;">
                         <button id="save-config-btn" class="btn btn-primary">Save Config</button>
@@ -235,7 +242,7 @@
 
                     <div class="form-row">
                         <label>Install New / Update Existing:</label>
-                        <div class="input-group">
+                        <div class="input-group" style="flex-wrap: wrap; gap: 10px;">
                             <div style="display: flex; align-items: center; margin-right: 15px;">
                                 <label class="checkbox-container"
                                     title="Install with Write permissions (default is Read-only)">
@@ -243,11 +250,15 @@
                                 </label>
                             </div>
                             <button id="batch-install-btn" class="btn btn-primary"
-                                style="flex:1; max-width: 300px;">Install from
+                                style="flex:1; min-width: 150px; max-width: 300px;">Install from
                                 Location</button>
                             <button id="batch-update-btn" class="btn btn-secondary"
-                                style="flex:1; max-width: 300px;">Update from
+                                style="flex:1; min-width: 150px; max-width: 300px;">Update from
                                 Location</button>
+                            <button id="mobile-push-btn" class="btn btn-purple"
+                                style="flex:1; min-width: 150px; max-width: 300px; background-color: #f72585;">Push to
+                                Mobile
+                                (ADB)</button>
                         </div>
                     </div>
 

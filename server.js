@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +19,9 @@ if (process.getuid && process.getuid() !== 0) {
 
 const PORT = 3000;
 const NODE_COUNT = 26; // Support A-Z
+
+// Get the user who ran sudo
+const sudoUser = process.env.SUDO_USER || 'joanramon';
 // Store running processes: { id: process }
 const nodeProcesses = {};
 
@@ -33,7 +37,8 @@ let globalConfig = {
     adbPath: 'adb', // Default to 'adb' in PATH, or full path like ~/Android/Sdk/platform-tools/adb
     apkInstallPath: '',
     adbPushPath: '',
-    adbPushRemotePath: '/sdcard/Download/'
+    adbPushRemotePath: '/sdcard/Download/',
+    mobilePackageName: 'com.minima.android'
 };
 
 // Load Config from File
@@ -337,9 +342,10 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         }
 
         io.emit('vite-log', `[Vite] Starting server in ${cwd}...`);
+        io.emit('vite-log', `[Vite] Running as user: ${sudoUser}`);
 
-        // npm run dev
-        viteProcess = spawn('npm', ['run', 'dev'], { cwd, shell: true });
+        // npm run dev as non-root
+        viteProcess = spawn(`sudo -u ${sudoUser} npm run dev`, { cwd, shell: true });
 
         viteProcess.stdout.on('data', d => {
             const msg = d.toString();
@@ -378,9 +384,9 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
     socket.on('run-vite-build-only', () => {
         const cwd = globalConfig.projectPath;
-        io.emit('vite-log', `[System] Starting 'npm run build' in ${cwd}...\n`);
+        io.emit('vite-log', `[System] Starting 'npm run build' as user ${sudoUser} in ${cwd}...\n`);
 
-        const build = spawn('npm', ['run', 'build'], {
+        const build = spawn(`sudo -u ${sudoUser} npm run build`, {
             cwd,
             shell: true
         });
@@ -629,11 +635,11 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
     socket.on('run-build-zip', () => {
         const cwd = globalConfig.projectPath;
-        io.emit('build-output', `[System] Starting 'npm run build && npm run minima:zip' in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting 'npm run build && npm run minima:zip' as user ${sudoUser} in ${cwd}...\n`);
 
         // Run as a shell command to allow chaining &&
         // Removed redundant 'npm run build' as 'npm run minima:zip' already includes it
-        const build = spawn('npm run generate:routes && npm run minima:zip', {
+        const build = spawn(`sudo -u ${sudoUser} npm run generate:routes && sudo -u ${sudoUser} npm run minima:zip`, {
             cwd,
             shell: true
         });
@@ -665,14 +671,15 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
 
-        io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) as user ${sudoUser} in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n`);
         io.emit('build-output', `[System] This will perform a clean, deterministic build of the Android APK.\n\n`);
 
         // Execute the unified build script
         const scriptPath = './scripts/build_android_clean.sh';
-        const command = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        const innerCommand = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        const command = `sudo -u ${sudoUser} ${innerCommand}`;
 
         const build = spawn(command, {
             cwd,
@@ -704,13 +711,14 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
 
-        io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) as user ${sudoUser} in ${cwd}...\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n\n`);
 
         // Execute the unified build script
         const scriptPath = './scripts/build_android_clean.sh';
-        const command = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        const innerCommand = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        const command = `sudo -u ${sudoUser} ${innerCommand}`;
 
         const build = spawn(command, {
             cwd,
@@ -886,6 +894,229 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         });
     });
 
+    socket.on('mobile-dapp-push', async (data) => {
+        const { filePath, deviceId } = data;
+        const adb = globalConfig.adbPath || 'adb';
+        const pkg = globalConfig.mobilePackageName || 'com.minima.android';
+
+        if (!filePath) {
+            io.emit('dapp-log', '[Error] No dApp path provided.\n');
+            io.emit('mobile-push-complete');
+            return;
+        }
+
+        io.emit('dapp-log', `[Mobile Push] Starting Hybrid Push for: ${filePath}\n`);
+        io.emit('dapp-log', `[Mobile Push] Target Package: ${pkg}\n`);
+
+        let tmpDir = null;
+        let mdsFileRemotePath = `/sdcard/Download/metachain_mobile_push.mds`;
+        const localRpcPort = 19005;
+        const adbPrefix = deviceId ? `${adb} -s ${deviceId}` : adb;
+        const adbEnv = { ...process.env };
+        if (process.env.SUDO_USER) {
+            adbEnv.HOME = `/home/${process.env.SUDO_USER}`;
+        }
+
+        try {
+            // --- STEP 1: RPC INSTALL ATTEMPT ---
+            let rpcSuccess = false;
+
+            if (fs.statSync(filePath).isFile() && filePath.endsWith('.zip')) {
+                io.emit('dapp-log', `[Mobile Push] Source is a zip, trying RPC install first...\n`);
+
+                // Push ZIP file
+                await new Promise((resolve, reject) => {
+                    exec(`${adbPrefix} push "${filePath}" "${mdsFileRemotePath}"`, { env: adbEnv }, (err, stdout, stderr) => {
+                        if (err) reject(new Error(stderr || err.message));
+                        else resolve();
+                    });
+                });
+
+                // Try common Minima ports (9005=RPC, 9001=RPC, 9003=MDS SSL, 9004=MDS)
+                const portsToTry = [9005, 9001, 9003, 9004, 9002];
+
+                for (const port of portsToTry) {
+                    if (rpcSuccess) break;
+                    io.emit('dapp-log', `[Mobile Push] Probing RPC on port ${port}...\n`);
+
+                    await new Promise((resolve) => {
+                        exec(`${adbPrefix} forward tcp:${localRpcPort} tcp:${port}`, { env: adbEnv }, () => resolve());
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    for (const isHttps of [true, false]) {
+                        try {
+                            const protocol = isHttps ? https : http;
+                            const rpcPath = '/mds' + encodeURIComponent(` action:install file:"${mdsFileRemotePath}"`);
+                            const rpcOptions = {
+                                hostname: 'localhost', port: localRpcPort, path: rpcPath, method: 'GET',
+                                rejectUnauthorized: false,
+                                headers: { 'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64') }
+                            };
+
+                            const resJson = await new Promise((resolve, reject) => {
+                                const req = protocol.request(rpcOptions, res => {
+                                    let body = '';
+                                    res.on('data', chunk => body += chunk);
+                                    res.on('end', () => {
+                                        try {
+                                            resolve(JSON.parse(body));
+                                        } catch (e) {
+                                            reject(new Error('Invalid JSON response'));
+                                        }
+                                    });
+                                });
+                                req.on('error', e => reject(e));
+                                req.setTimeout(2000, () => { req.destroy(); reject(new Error('Timeout')); });
+                                req.end();
+                            });
+
+                            if (resJson.status) {
+                                io.emit('dapp-log', `✅ RPC Install successful on port ${port} (${isHttps ? 'HTTPS' : 'HTTP'})!\n`);
+                                rpcSuccess = true;
+                                break;
+                            }
+                        } catch (e) { }
+                    }
+                    // Cleanup tunnel
+                    exec(`${adbPrefix} forward --remove tcp:${localRpcPort}`, { env: adbEnv });
+                }
+            }
+
+            if (rpcSuccess) {
+                // Cleanup remote zip
+                exec(`${adbPrefix} shell rm "${mdsFileRemotePath}"`, { env: adbEnv });
+                io.emit('dapp-log', `\n✨ Mobile Push completed via RPC.\n`);
+            } else {
+                // --- STEP 2: MANUAL PUSH FALLBACK ---
+                io.emit('dapp-log', `[Mobile Push] RPC failed or unavailable. Falling back to Manual File Push...\n`);
+
+                let sourceDir = filePath;
+
+                // If it's a file, unzip it
+                if (fs.statSync(filePath).isFile()) {
+                    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minima-push-'));
+                    io.emit('dapp-log', `[Mobile Push] Unzipping package...\n`);
+                    await new Promise((resolve, reject) => {
+                        exec(`unzip -o "${filePath}" -d "${tmpDir}"`, (err) => { // -o to overwrite existing files
+                            if (err) reject(err);
+                            else resolve();
+                        });
+                    });
+                    sourceDir = tmpDir;
+                }
+
+                // Read dapp.conf
+                const confPath = path.join(sourceDir, 'dapp.conf');
+                if (!fs.existsSync(confPath)) throw new Error('dapp.conf not found');
+                const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
+                const dappname = conf.name;
+
+                io.emit('dapp-log', `[Mobile Push] Detected dApp: ${dappname}. Moving to internal storage...\n`);
+
+                const remoteTmpPath = `/sdcard/Download/MinimaDapps/${dappname}`;
+                await new Promise((resolve) => exec(`${adbPrefix} shell mkdir -p "${remoteTmpPath}"`, { env: adbEnv }, () => resolve()));
+                await new Promise((resolve, reject) => {
+                    exec(`${adbPrefix} push "${sourceDir}/." "${remoteTmpPath}/"`, { env: adbEnv }, (err, stdout, stderr) => {
+                        if (err) reject(new Error(stderr || err.message)); else resolve();
+                    });
+                });
+
+                // Permissions
+                await new Promise((resolve) => exec(`${adbPrefix} shell "chmod -R 777 ${remoteTmpPath}"`, { env: adbEnv }, () => resolve()));
+
+                // Target internal storage - We try two possible paths
+                const targetPaths = [`files/minima/dapps/${dappname}`, `files/dapps/${dappname}`];
+                let manualPushSuccess = false;
+
+                for (const targetPath of targetPaths) {
+                    if (manualPushSuccess) break;
+                    io.emit('dapp-log', `[Mobile Push] Attempting to copy to ${targetPath}...\n`);
+                    const runAsCheck = `${adbPrefix} shell "run-as ${pkg} id"`;
+
+                    try {
+                        // Check if run-as is even possible
+                        await new Promise((resolve, reject) => {
+                            exec(runAsCheck, { env: adbEnv }, (err, stdout, stderr) => {
+                                if (err || (stderr && stderr.includes('not debuggable'))) {
+                                    reject(new Error(stderr || 'Package not debuggable'));
+                                } else resolve();
+                            });
+                        });
+
+                        const runAsCmd = `${adbPrefix} shell "run-as ${pkg} mkdir -p ${targetPath} && run-as ${pkg} cp -r ${remoteTmpPath}/* ${targetPath}/"`;
+                        await new Promise((resolve, reject) => {
+                            exec(runAsCmd, { env: adbEnv }, (err, stdout, stderr) => {
+                                if (err) reject(new Error(stderr || 'mkdir/cp failed'));
+                                else resolve();
+                            });
+                        });
+                        io.emit('dapp-log', `[Mobile Push] Successfully copied to ${targetPath} using 'run-as cp'.\n`);
+                        manualPushSuccess = true;
+                    } catch (e) {
+                        if (e.message.includes('not debuggable')) {
+                            io.emit('dapp-log', `[Mobile Push] ⚠️ 'run-as' blocked (package not debuggable). Manual push impossible on release APK.\n`);
+                            break;
+                        }
+
+                        io.emit('dapp-log', `[Mobile Push] 'run-as cp' failed for ${targetPath}: ${e.message}. Trying recursive cat fallback...\n`);
+                        try {
+                            const pushRecursive = async (localDirPath, remoteDirPath) => {
+                                const items = fs.readdirSync(localDirPath, { withFileTypes: true });
+                                for (const item of items) {
+                                    const localP = path.join(localDirPath, item.name);
+                                    const remoteP = `${remoteDirPath}/${item.name}`;
+                                    if (item.isDirectory()) {
+                                        await new Promise((resolve, reject) => {
+                                            exec(`${adbPrefix} shell "run-as ${pkg} mkdir -p ${remoteP}"`, { env: adbEnv }, (err, stdout, stderr) => {
+                                                if (err) reject(new Error(stderr)); else resolve();
+                                            });
+                                        });
+                                        await pushRecursive(localP, remoteP);
+                                    } else {
+                                        const catCmd = `${adbPrefix} shell "run-as ${pkg} sh -c 'cat > \\"${remoteP}\\"'" < "${localP}"`;
+                                        await new Promise((resolve, reject) => {
+                                            exec(catCmd, { env: adbEnv }, (err, stdout, stderr) => {
+                                                if (err) reject(new Error(stderr)); else resolve();
+                                            });
+                                        });
+                                    }
+                                }
+                            };
+                            await pushRecursive(sourceDir, targetPath);
+                            io.emit('dapp-log', `[Mobile Push] Successfully copied to ${targetPath} using 'run-as cat' fallback.\n`);
+                            manualPushSuccess = true;
+                        } catch (catErr) {
+                            io.emit('dapp-log', `[Mobile Push] Fallback failed for ${targetPath}: ${catErr.message}\n`);
+                        }
+                    }
+                }
+
+                if (!manualPushSuccess) {
+                    throw new Error('Manual push failed. Ensure the App is debuggable or use RPC method.');
+                }
+
+                // Cleanup
+                exec(`${adbPrefix} shell rm -rf "${remoteTmpPath}"`, { env: adbEnv });
+                if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+
+                io.emit('dapp-log', `\n✅ dApp pushed manually. Please RESTART Minima on your phone to see it!\n`);
+            }
+
+        } catch (error) {
+            io.emit('dapp-log', `\n❌ Mobile Push failed: ${error.message}\n`);
+            // Attempt tunnel cleanup if error occurred
+            try {
+                exec(`${adbPrefix} forward --remove tcp:${localRpcPort}`, { env: adbEnv });
+            } catch (e) { /* ignore */ }
+            if (tmpDir) {
+                try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+            }
+            try { exec(`${adbPrefix} shell rm "${mdsFileRemotePath}"`, { env: adbEnv }); } catch (e) { /* ignore */ }
+        } finally {
+            io.emit('mobile-push-complete');
+        }
+    });
 
 });
 
@@ -905,17 +1136,11 @@ server.listen(PORT, () => {
 
     let openCmd = `xdg-open ${url}`;
     if (sudoUser) {
-        // Run as the original user. 
-        // We use 'sudo -u' instead of 'su -' to avoid a full login shell that wipes variables.
-        // We likely need to set DISPLAY=:0 for GUI apps to find the session.
-        // potentially need DBUS_SESSION_BUS_ADDRESS as well, but DISPLAY=:0 often suffices for simple xdg-open.
         openCmd = `sudo -u ${sudoUser} DISPLAY=:0 xdg-open ${url}`;
     }
 
     console.log(`Opening browser at ${url}...`);
-    console.log(`Opening browser at ${url}...`);
 
-    // Use spawn instead of exec to detach the process
     let cmd, args;
     if (sudoUser) {
         cmd = 'sudo';

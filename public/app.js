@@ -471,7 +471,8 @@ let globalConfig = {
     adbPath: 'adb',
     apkInstallPath: '',
     adbPushPath: '',
-    adbPushRemotePath: '/sdcard/Download/'
+    adbPushRemotePath: '/sdcard/Download/',
+    mobilePackageName: 'com.minima.android'
 };
 
 // Listen for Config from Server
@@ -483,6 +484,9 @@ socket.on('config-update', (config) => {
     if (configDappNameInput) configDappNameInput.value = globalConfig.dappName;
     if (configEnvPathInput) configEnvPathInput.value = globalConfig.envPath;
     if (configAdbPathInput) configAdbPathInput.value = globalConfig.adbPath || 'adb';
+
+    const configMobilePkgInput = document.getElementById('config-mobile-package-name');
+    if (configMobilePkgInput) configMobilePkgInput.value = config.mobilePackageName || 'com.minima.android';
 
     const dappLocationInput = document.getElementById('dapp-location-config');
     if (dappLocationInput) dappLocationInput.value = globalConfig.dappLocation;
@@ -515,6 +519,11 @@ saveConfigBtn.onclick = () => {
     globalConfig.dappName = configDappNameInput.value.trim();
     globalConfig.envPath = configEnvPathInput.value.trim();
     globalConfig.adbPath = configAdbPathInput.value.trim() || 'adb';
+
+    const configMobilePkgInput = document.getElementById('config-mobile-package-name');
+    if (configMobilePkgInput) {
+        globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || 'com.metachain.app';
+    }
 
     addToGlobalLog(`[Config] Saved: Project=${globalConfig.projectPath}, Dapp=${globalConfig.dappName}, ADB=${globalConfig.adbPath}`);
 
@@ -628,6 +637,32 @@ batchUpdateBtn.onclick = () => {
         alert('Please specify the dApp Build Location file path.');
     }
 };
+
+const mobilePushBtn = document.getElementById('mobile-push-btn');
+if (mobilePushBtn) {
+    mobilePushBtn.onclick = () => {
+        const logObj = document.getElementById('dapp-log');
+        if (logObj) logObj.textContent = 'Starting Direct Mobile Push Process...\n';
+
+        const filePath = dappLocationConfigInput.value.trim();
+        const deviceId = getSelectedAdbDevice('dapps');
+
+        if (filePath) {
+            socket.emit('mobile-dapp-push', { filePath, deviceId });
+            mobilePushBtn.disabled = true;
+            mobilePushBtn.textContent = 'Pushing...';
+        } else {
+            alert('Please specify the dApp Build Location file path.');
+        }
+    };
+
+    socket.on('mobile-push-complete', () => {
+        if (mobilePushBtn) {
+            mobilePushBtn.disabled = false;
+            mobilePushBtn.textContent = 'Push to Mobile (ADB)';
+        }
+    });
+}
 
 // dApp Refresh List Logic
 refreshDappsBtn.onclick = () => {

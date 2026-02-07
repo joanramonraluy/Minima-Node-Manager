@@ -6,5 +6,6 @@
   "adbPath": "/home/joanramon/Android/Sdk/platform-tools/adb",
   "apkInstallPath": "/home/joanramon/Minima/metachain/examples/minimaapk-main/app/release/minima-1.0.46.6.apk",
   "adbPushPath": "/home/joanramon/Minima/metachain/metachain-0.0.8.mds.zip",
-  "adbPushRemotePath": "/sdcard/Download/"
+  "adbPushRemotePath": "/sdcard/Download/",
+  "mobilePackageName": "com.minima.android"
 }
