@@ -671,18 +671,24 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
 
-        io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) as user ${sudoUser} in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Android Build & Install (Clean Pipeline) as user ${sudoUser}...\n`);
+        io.emit('build-output', `[System] Project Path: ${cwd}\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n`);
-        io.emit('build-output', `[System] This will perform a clean, deterministic build of the Android APK.\n\n`);
+        io.emit('build-output', `[System] This will perform a clean, deterministic build of the Android APK using the Manager script.\n\n`);
 
-        // Execute the unified build script
+        // Execute the centralized build script from MinimaNodeManager/scripts
         const scriptPath = './scripts/build_android_clean.sh';
-        const innerCommand = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        // Command format: ./scripts/build_android_clean.sh <PROJECT_DIR> <ADB_PATH> [DEVICE_ID]
+        let innerCommand = `${scriptPath} "${cwd}" "${adb}"`;
+        if (deviceId) {
+            innerCommand += ` "${deviceId}"`;
+        }
+
         const command = `sudo -u ${sudoUser} ${innerCommand}`;
 
         const build = spawn(command, {
-            cwd,
+            cwd: __dirname, // Execute from Manager root where scripts reside
             shell: true
         });
 
@@ -711,17 +717,22 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         const cwd = globalConfig.projectPath;
         const adb = globalConfig.adbPath || 'adb';
 
-        io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) as user ${sudoUser} in ${cwd}...\n`);
+        io.emit('build-output', `[System] Starting Refined Build All (Clean Pipeline: MiniDapp + Android) as user ${sudoUser}...\n`);
+        io.emit('build-output', `[System] Project Path: ${cwd}\n`);
         io.emit('build-output', `[System] Using ADB: ${adb}\n`);
         io.emit('build-output', `[System] Target Device: ${deviceId || 'Auto (Default)'}\n\n`);
 
-        // Execute the unified build script
+        // Execute the centralized build script
         const scriptPath = './scripts/build_android_clean.sh';
-        const innerCommand = deviceId ? `${scriptPath} ${deviceId}` : scriptPath;
+        let innerCommand = `${scriptPath} "${cwd}" "${adb}"`;
+        if (deviceId) {
+            innerCommand += ` "${deviceId}"`;
+        }
+
         const command = `sudo -u ${sudoUser} ${innerCommand}`;
 
         const build = spawn(command, {
-            cwd,
+            cwd: __dirname, // Execute from Manager root
             shell: true
         });
 
