@@ -639,7 +639,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
         // Run as a shell command to allow chaining &&
         // Removed redundant 'npm run build' as 'npm run minima:zip' already includes it
-        const build = spawn(`sudo -u ${sudoUser} npm run generate:routes && sudo -u ${sudoUser} npm run minima:zip`, {
+        const build = spawn(`sudo -u ${sudoUser} npm run generate:routes && sudo -u ${sudoUser} npm run build && sudo -u ${sudoUser} npm run minima:zip`, {
             cwd,
             shell: true
         });
@@ -729,7 +729,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             innerCommand += ` "${deviceId}"`;
         }
 
-        const command = `sudo -u ${sudoUser} ${innerCommand}`;
+        const command = `sudo -u ${sudoUser} ${innerCommand} && sudo -u ${sudoUser} npm run minima:zip`;
 
         const build = spawn(command, {
             cwd: __dirname, // Execute from Manager root
