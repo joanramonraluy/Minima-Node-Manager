@@ -325,14 +325,15 @@
                                 title="Change Project Path in Config">Browse...</button>
                         </div>
                     </div>
-                    <p class="description"><strong>Build & Zip:</strong> Generates routes and creates the MiniDapp ZIP
-                        package (<code>.mds</code>).
+                    <p class="description"><strong>Build & Zip:</strong> Compiles the web app (`npm run build`) and
+                        creates the MiniDapp package (`.mds.zip`). Ideal for manual node/MDS uploads.
                     </p>
                     <p class="description"><strong>Build & Install Android APK:</strong> Compiles the project and
-                        installs the debug APK on the selected device.
+                        installs the debug APK on the selected device. Does <strong>NOT</strong> update the `.mds.zip`
+                        file.
                     </p>
-                    <p class="description"><strong>Build All & Zip & Install:</strong> Complete deterministic pipeline
-                        that builds both the MiniDapp and the APK, ensuring everything is in sync.
+                    <p class="description"><strong>Build All, Install & Zip:</strong> The complete pipeline. Builds the
+                        APK, installs it, AND generates the updated `.mds.zip` file.
                     </p>
                     <div class="button-group">
                         <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
@@ -340,7 +341,7 @@
                         <button id="build-android-btn" class="btn btn-green"
                             style="background-color: #3ddc84; color: #000;">Build & Install Android APK</button>
                         <button id="build-full-btn" class="btn btn-blue"
-                            style="background-color: #3a86ff; color: #fff;">Build All & Zip & Install</button>
+                            style="background-color: #3a86ff; color: #fff;">Build All, Install & Zip</button>
                     </div>
                     <div class="build-output-container">
                         <div class="output-header">
