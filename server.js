@@ -729,7 +729,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             innerCommand += ` "${deviceId}"`;
         }
 
-        const command = `sudo -u ${sudoUser} ${innerCommand} && sudo -u ${sudoUser} npm run minima:zip`;
+        const command = `sudo -u ${sudoUser} ${innerCommand} && cd ${cwd} && sudo -u ${sudoUser} npm run minima:zip`;
 
         const build = spawn(command, {
             cwd: __dirname, // Execute from Manager root
