@@ -45,10 +45,13 @@ fi
 
 # --- Minima Configuration ---
 
-# Use Node ID directly for folder naming (node1, node2, etc.)
-DATA_NAME="node$NODE_ID"
+# Use Node ID directly for folder naming (node1, node2, etc.) but inside 'nodes/' directory
+DATA_NAME="nodes/node$NODE_ID"
 # Port is always 9001 because each node has its own IP!
 PORT=9001 
+
+# Ensure directory exists
+mkdir -p "$DATA_NAME"
 
 echo "Starting Node $NODE_ID ($DATA_NAME) in namespace $NS on $IP:$PORT..."
 
@@ -87,6 +90,7 @@ export MINIMA_PORT=$PORT
 
 # Execute Minima inside Namespace
 # We use 'exec' so the shell process is replaced by ip netns exec -> java
+# Note: tee log file path updated to match new structure
 exec ip netns exec $NS java -jar ./minima.jar \
   -data $DATA_NAME \
   -basefolder $DATA_NAME \

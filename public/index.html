@@ -160,74 +160,10 @@
 
             <!-- Tab Content: dApp Manager -->
             <div id="tab-dapps" class="tab-content">
-                <div class="control-panel" style="margin-bottom: 20px;">
-                    <h3>ADB Device Selection</h3>
-                    <div class="form-row">
-                        <label for="adb-device-select-dapps">Target Device:</label>
-                        <div class="input-group">
-                            <select id="adb-device-select-dapps" class="command-input adb-device-select"
-                                style="flex: 1;">
-                                <option value="">Auto (single device)</option>
-                                <option value="manual">-- Enter Manually --</option>
-                            </select>
-                            <button class="btn btn-secondary refresh-adb-devices-btn">
-                                🔄 Refresh
-                            </button>
-                        </div>
-                    </div>
-                    <div id="manual-device-id-container-dapps" class="form-row"
-                        style="margin-top: 10px; display: none;">
-                        <label for="manual-device-id-dapps">Device Serial:</label>
-                        <input type="text" id="manual-device-id-dapps" class="command-input"
-                            placeholder="e.g. emulator-5554">
-                    </div>
-                </div>
 
-                <div class="control-panel" style="margin-bottom: 20px;">
-                    <h3>Generic APK Installation (ADB)</h3>
-                    <div class="form-row">
-                        <label>Select APK File:</label>
-                        <div class="input-group">
-                            <input type="text" id="apk-location-input" class="command-input"
-                                placeholder="/path/to/your/app.apk">
-                            <button class="btn btn-neutral browse-btn" data-target="apk-location-input"
-                                data-type="file">Browse...</button>
-                            <button id="apk-install-btn" class="btn btn-green"
-                                style="background-color: #3ddc84; color: #000;">Install APK</button>
-                        </div>
-                    </div>
-                    <p class="description" style="color: #888; font-size: 0.9rem; margin-top: 5px;">
-                        Installs a local APK file to the connected Android device via ADB.
-                    </p>
-                </div>
-
-                <div class="control-panel" style="margin-top: 20px;">
-                    <h3>File Push (ADB Push)</h3>
-                    <div class="form-row">
-                        <label>Select Local File:</label>
-                        <div class="input-group">
-                            <input type="text" id="adb-push-local-input" class="command-input"
-                                placeholder="/path/to/local/file">
-                            <button class="btn btn-neutral browse-btn" data-target="adb-push-local-input"
-                                data-type="file">Browse...</button>
-                        </div>
-                    </div>
-                    <div class="form-row" style="margin-top: 10px;">
-                        <label>Remote Destination:</label>
-                        <div class="input-group">
-                            <input type="text" id="adb-push-remote-input" class="command-input"
-                                value="/sdcard/Download/" placeholder="/sdcard/Download/">
-                            <button id="adb-push-btn" class="btn btn-purple" style="background-color: #7209b7;">Push
-                                File</button>
-                        </div>
-                    </div>
-                    <p class="description" style="color: #888; font-size: 0.9rem; margin-top: 5px;">
-                        Pushes a local file to the specified location on the connected Android device.
-                    </p>
-                </div>
-
+                <!-- SECTION: Web / MiniDapp Management -->
                 <div class="control-panel">
-                    <h3>Batch dApp Management</h3>
+                    <h3>Web / MiniDapp Management</h3>
 
                     <div class="form-row"
                         style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 20px;">
@@ -239,6 +175,14 @@
                                 data-type="file">Browse...</button>
                         </div>
                     </div>
+
+                    <p class="description"
+                        style="color: #aaa; font-size: 0.85rem; margin-bottom: 15px; line-height: 1.4;">
+                        <strong>Install:</strong> Uploads and installs the file to all selected nodes.<br>
+                        <strong>Update:</strong> Updates the existing MiniDapp on nodes while preserving data.<br>
+                        <strong>Push to Mobile:</strong> Installs or updates the MiniDapp within Minima on the mobile
+                        device.
+                    </p>
 
                     <div class="form-row">
                         <label>Install New / Update Existing:</label>
@@ -263,7 +207,7 @@
                     </div>
 
                     <div class="form-row" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #444;">
-                        <label>Uninstall:</label>
+                        <label>Uninstall from Nodes:</label>
                         <div class="input-group">
                             <select id="dapp-select" class="command-input" style="flex: 2;">
                                 <option value="">-- Select dApp to Uninstall --</option>
@@ -273,11 +217,99 @@
                             <button id="batch-uninstall-btn" class="btn btn-danger">Uninstall Selected</button>
                         </div>
                     </div>
-                    <!-- Log moved inside control panel -->
-                    <div class="inline-log-container" style="margin-top: 20px;">
-                        <div class="log-header">dApp Operations Log</div>
-                        <div id="dapp-log" class="terminal-output"></div>
+                </div>
+
+                <!-- SECTION: Android App / File Management -->
+                <div class="control-panel" style="margin-top: 20px;">
+                    <h3>Android Management (ADB)</h3>
+
+                    <!-- ADB Device Selection (Inside Android Section) -->
+                    <div
+                        style="background: #111; padding: 15px; border-radius: 4px; border: 1px solid #333; margin-bottom: 25px;">
+                        <h4
+                            style="color: #aaa; margin: 0 0 10px 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Target ADB Device</h4>
+                        <div class="form-row" style="margin-bottom: 0;">
+                            <div class="input-group">
+                                <select id="adb-device-select-dapps" class="command-input adb-device-select"
+                                    style="flex: 1;">
+                                    <option value="">Auto (single device)</option>
+                                    <option value="manual">-- Enter Manually --</option>
+                                </select>
+                                <button class="btn btn-secondary refresh-adb-devices-btn">
+                                    🔄 Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <div id="manual-device-id-container-dapps" class="form-row"
+                            style="margin-top: 10px; display: none; margin-bottom: 0;">
+                            <label for="manual-device-id-dapps">Device Serial:</label>
+                            <input type="text" id="manual-device-id-dapps" class="command-input"
+                                placeholder="e.g. emulator-5554">
+                        </div>
                     </div>
+
+                    <div style="border-bottom: 1px solid #333; margin-bottom: 20px; padding-bottom: 20px;">
+                        <h4 style="color: #aaa; margin: 0 0 15px 0;">APK Installation</h4>
+                        <div class="form-row">
+                            <label>Select APK File:</label>
+                            <div class="input-group">
+                                <input type="text" id="apk-location-input" class="command-input"
+                                    placeholder="/path/to/your/app.apk">
+                                <button class="btn btn-neutral browse-btn" data-target="apk-location-input"
+                                    data-type="file">Browse...</button>
+                                <button id="apk-install-btn" class="btn btn-green"
+                                    style="background-color: #3ddc84; color: #000;">Install APK</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #222;">
+                            <h4 style="color: #aaa; margin: 0 0 15px 0;">APK Uninstallation</h4>
+                            <div class="form-row">
+                                <label>Target Package:</label>
+                                <div class="input-group">
+                                    <select id="apk-package-name-select" class="command-input" style="flex: 1;">
+                                        <option value="">-- No Packages Loaded --</option>
+                                    </select>
+                                    <button id="refresh-adb-packages-btn" class="btn btn-secondary"
+                                        title="Refresh package list from device">
+                                        ↻ Packages
+                                    </button>
+                                    <button id="apk-uninstall-btn" class="btn btn-danger">Uninstall APK</button>
+                                </div>
+                            </div>
+                            <input type="hidden" id="apk-package-name-input">
+                        </div>
+                    </div>
+
+                    <h4 style="color: #aaa; margin: 20px 0 15px 0;">File Push (ADB Push)</h4>
+                    <div class="form-row">
+                        <label>Select Local File:</label>
+                        <div class="input-group">
+                            <input type="text" id="adb-push-local-input" class="command-input"
+                                placeholder="/path/to/local/file">
+                            <button class="btn btn-neutral browse-btn" data-target="adb-push-local-input"
+                                data-type="file">Browse...</button>
+                        </div>
+                    </div>
+                    <div class="form-row" style="margin-top: 10px;">
+                        <label>Remote Destination:</label>
+                        <div class="input-group">
+                            <input type="text" id="adb-push-remote-input" class="command-input"
+                                value="/sdcard/Download/" placeholder="/sdcard/Download/">
+                            <button id="adb-push-btn" class="btn btn-purple" style="background-color: #7209b7;">Push
+                                File</button>
+                        </div>
+                    </div>
+                    <p class="description" style="color: #888; font-size: 0.9rem; margin-top: 10px;">
+                        Pushes a local file or directory to the specified location on the device.
+                    </p>
+                </div>
+
+                <!-- Shared Log for dApp Operations -->
+                <div class="inline-log-container" style="margin-top: 20px;">
+                    <div class="log-header">dApp & Android Operations Log</div>
+                    <div id="dapp-log" class="terminal-output"></div>
                 </div>
             </div>
 

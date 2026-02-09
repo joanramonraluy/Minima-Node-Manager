@@ -905,6 +905,73 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         });
     });
 
+    socket.on('run-adb-uninstall', (data) => {
+        const { packageName, deviceId } = data;
+        const adb = globalConfig.adbPath || 'adb';
+
+        if (!packageName) {
+            io.emit('build-output', '[Error] No package name provided for uninstall.\n');
+            return;
+        }
+
+        // Update and save config
+        globalConfig.mobilePackageName = packageName;
+        saveConfig();
+        io.emit('config-update', globalConfig);
+
+        io.emit('build-output', `[System] Uninstalling APK: ${packageName}\n`);
+        io.emit('build-output', `[System] Using ADB: ${adb}\n`);
+        if (deviceId) {
+            io.emit('build-output', `[System] Target Device: ${deviceId}\n\n`);
+        } else {
+            io.emit('build-output', `[System] Target Device: Auto\n\n`);
+        }
+
+        const args = deviceId ? ['-s', deviceId, 'uninstall', packageName] : ['uninstall', packageName];
+        const uninstall = spawn(adb, args);
+
+        uninstall.stdout.on('data', (data) => {
+            io.emit('build-output', data.toString());
+        });
+
+        uninstall.stderr.on('data', (data) => {
+            io.emit('build-output', `[stderr] ${data.toString()}`);
+        });
+
+        uninstall.on('close', (code) => {
+            io.emit('build-output', `\n[System] ADB uninstall exited with code ${code}\n`);
+            if (code === 0) {
+                io.emit('build-output', `✅ APK '${packageName}' uninstalled successfully!\n`);
+            } else {
+                io.emit('build-output', `❌ APK uninstall failed. Is the package name correct?\n`);
+            }
+            io.emit('build-complete', { success: code === 0 });
+        });
+    });
+
+    socket.on('get-adb-packages', (data) => {
+        const { deviceId } = data;
+        const adb = globalConfig.adbPath || 'adb';
+
+        const args = deviceId ? ['-s', deviceId, 'shell', 'pm', 'list', 'packages', '-3'] : ['shell', 'pm', 'list', 'packages', '-3'];
+
+        exec(`${adb} ${args.join(' ')}`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`ADB error: ${error}`);
+                socket.emit('adb-package-list', { error: stderr || error.message });
+                return;
+            }
+
+            const packages = stdout
+                .split('\n')
+                .map(line => line.replace('package:', '').trim())
+                .filter(pkg => pkg.length > 0)
+                .sort();
+
+            socket.emit('adb-package-list', { packages });
+        });
+    });
+
     socket.on('mobile-dapp-push', async (data) => {
         const { filePath, deviceId } = data;
         const adb = globalConfig.adbPath || 'adb';
