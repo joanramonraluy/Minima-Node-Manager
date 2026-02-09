@@ -486,7 +486,9 @@ socket.on('config-update', (config) => {
     if (configAdbPathInput) configAdbPathInput.value = globalConfig.adbPath || 'adb';
 
     const configMobilePkgInput = document.getElementById('config-mobile-package-name');
+    const apkPackageNameInput = document.getElementById('apk-package-name-input');
     if (configMobilePkgInput) configMobilePkgInput.value = config.mobilePackageName || 'com.minima.android';
+    if (apkPackageNameInput) apkPackageNameInput.value = config.mobilePackageName || 'com.minima.android';
 
     const dappLocationInput = document.getElementById('dapp-location-config');
     if (dappLocationInput) dappLocationInput.value = globalConfig.dappLocation;
@@ -521,8 +523,11 @@ saveConfigBtn.onclick = () => {
     globalConfig.adbPath = configAdbPathInput.value.trim() || 'adb';
 
     const configMobilePkgInput = document.getElementById('config-mobile-package-name');
+    const apkPackageNameInput = document.getElementById('apk-package-name-input');
     if (configMobilePkgInput) {
-        globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || 'com.metachain.app';
+        globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || 'com.minima.android';
+    } else if (apkPackageNameInput) {
+        globalConfig.mobilePackageName = apkPackageNameInput.value.trim() || 'com.minima.android';
     }
 
     addToGlobalLog(`[Config] Saved: Project=${globalConfig.projectPath}, Dapp=${globalConfig.dappName}, ADB=${globalConfig.adbPath}`);
@@ -793,6 +798,85 @@ if (adbPushBtn) {
         if (adbPushBtn) adbPushBtn.disabled = false;
         isAdbPushing = false;
     });
+}
+
+// Generic APK Uninstall
+const apkUninstallBtn = document.getElementById('apk-uninstall-btn');
+const apkPackageNameInput = document.getElementById('apk-package-name-input');
+const apkPackageNameSelect = document.getElementById('apk-package-name-select');
+const refreshAdbPackagesBtn = document.getElementById('refresh-adb-packages-btn');
+
+if (apkUninstallBtn) {
+    apkUninstallBtn.onclick = () => {
+        const packageName = apkPackageNameSelect.value;
+        const deviceId = getSelectedAdbDevice('dapps');
+
+        if (packageName) {
+            const dappLog = document.getElementById('dapp-log');
+            if (dappLog) dappLog.textContent = `Starting APK uninstallation for: ${packageName}...\n`;
+
+            apkUninstallBtn.disabled = true;
+            socket.emit('run-adb-uninstall', { packageName, deviceId });
+        } else {
+            alert('Please select a package name to uninstall.');
+        }
+    };
+
+    socket.on('build-complete', () => {
+        if (apkUninstallBtn) apkUninstallBtn.disabled = false;
+    });
+}
+
+if (refreshAdbPackagesBtn) {
+    refreshAdbPackagesBtn.onclick = () => {
+        const deviceId = getSelectedAdbDevice('dapps');
+        refreshAdbPackagesBtn.disabled = true;
+        refreshAdbPackagesBtn.textContent = '🔄...';
+        socket.emit('get-adb-packages', { deviceId });
+    };
+}
+
+socket.on('adb-package-list', (data) => {
+    if (refreshAdbPackagesBtn) {
+        refreshAdbPackagesBtn.disabled = false;
+        refreshAdbPackagesBtn.textContent = '🔄 Packages';
+    }
+
+    if (data.error) {
+        addToGlobalLog(`[ADB] Error listing packages: ${data.error}`);
+        return;
+    }
+
+    if (apkPackageNameSelect) {
+        const currentVal = apkPackageNameSelect.value || globalConfig.mobilePackageName;
+        apkPackageNameSelect.innerHTML = '<option value="">-- Select Package --</option>';
+        data.packages.forEach(pkg => {
+            const option = document.createElement('option');
+            option.value = pkg;
+            option.textContent = pkg;
+            apkPackageNameSelect.appendChild(option);
+        });
+
+        // Restore selection if it exists in new list
+        if (data.packages.includes(currentVal)) {
+            apkPackageNameSelect.value = currentVal;
+            if (apkPackageNameInput) apkPackageNameInput.value = currentVal;
+        }
+    }
+});
+
+if (apkPackageNameSelect) {
+    apkPackageNameSelect.onchange = () => {
+        const val = apkPackageNameSelect.value;
+        if (apkPackageNameInput) {
+            apkPackageNameInput.value = val;
+            // Trigger change to auto-save config
+            apkPackageNameInput.dispatchEvent(new Event('change'));
+        }
+        // Also update globalConfig directly for immediate use
+        globalConfig.mobilePackageName = val;
+        socket.emit('update-config', globalConfig);
+    };
 }
 
 // Auto-refresh on dropdown interaction
@@ -1067,6 +1151,8 @@ setupAutoSave('config-dapp-name', 'dappName');
 setupAutoSave('config-env-path', 'envPath');
 setupAutoSave('dapp-location-config', 'dappLocation');
 setupAutoSave('apk-location-input', 'apkInstallPath');
+setupAutoSave('apk-package-name-input', 'mobilePackageName');
+setupAutoSave('config-mobile-package-name', 'mobilePackageName');
 setupAutoSave('adb-push-local-input', 'adbPushPath');
 setupAutoSave('adb-push-remote-input', 'adbPushRemotePath');
 

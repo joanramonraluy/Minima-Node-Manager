@@ -4,8 +4,8 @@
   "envPath": "/home/joanramon/Minima/metachain/.env",
   "dappLocation": "/home/joanramon/Minima/metachain/metachain-0.0.8.mds.zip",
   "adbPath": "/home/joanramon/Android/Sdk/platform-tools/adb",
-  "apkInstallPath": "/home/joanramon/Minima/metachain/examples/minimaapk-main/app/release/minima-1.0.46.6.apk",
-  "adbPushPath": "/home/joanramon/Minima/metachain/metachain-0.0.8.mds.zip",
+  "apkInstallPath": "/home/joanramon/Minima/metachain/android/app/build/outputs/apk/debug/app-debug.apk",
+  "adbPushPath": "/home/joanramon/Minima/metachain/android/app/build/outputs/apk/debug/app-debug.apk",
   "adbPushRemotePath": "/sdcard/Download/",
-  "mobilePackageName": "com.minima.android"
+  "mobilePackageName": "com.metachain.app"
 }
