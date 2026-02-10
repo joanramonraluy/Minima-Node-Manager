@@ -71,6 +71,12 @@ else
 fi
 
 # 6. Install APK
+if [ "$DEVICE_ID" == "--no-install" ] || [ "$DEVICE_ID" == "-n" ]; then
+    echo -e "\n${GREEN}[5/5] Skipping installation as requested.${NC}"
+    echo -e "${GREEN}✅ Success! APK built but not installed.${NC}"
+    exit 0
+fi
+
 echo -e "\n${GREEN}[5/5] Installing APK...${NC}"
 APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
@@ -88,10 +94,6 @@ fi
 echo "Installing to device..."
 if $ADB_CMD install -r -t "$APK_PATH"; then
     echo -e "${GREEN}✅ Success! App installed.${NC}"
-    
-    # Launch the app (Optional - heuristic to find package name or just exit)
-    # We won't launch it automatically to keep it simple, or we could parse config.
-    # But the user just asked for build & install.
 else
     echo -e "${RED}Failed to install APK.${NC}"
     exit 1

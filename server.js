@@ -469,45 +469,30 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
     });
 
     socket.on('batch-dapp-install', (data) => {
-        const { filePath, writeMode, update } = data;
+        const { filePath, writeMode } = data;
         if (!filePath || filePath.trim() === '') {
             io.emit('dapp-log', '[Error] No file path provided for dApp installation.');
             return;
         }
 
         const modeStr = writeMode ? '(Write Mode)' : '(Read Mode)';
-        const actionStr = update ? 'Updating' : 'Installing';
-
         const nodes = Object.keys(nodeProcesses);
-        io.emit('dapp-log', `\n[Batch] ${actionStr} dApp ${modeStr} from ${filePath} on ${nodes.length} nodes: ${nodes.join(', ')}...`);
+
+        if (nodes.length === 0) {
+            io.emit('dapp-log', '[Error] No nodes are running. Start at least one node.');
+            return;
+        }
+
+        io.emit('dapp-log', `\n[Batch] Starting Smart Deploy ${modeStr} from ${filePath} on ${nodes.length} nodes...`);
 
         nodes.forEach((id) => {
-            // Helper to perform the actual install/update
-            const performInstall = () => {
-                const trustParams = writeMode ? ' trust:write' : '';
-                const command = `mds action:install file:"${filePath}"${trustParams}`;
-                const actionLabel = "Install";
-
-                sendAction(id, command, actionLabel);
-            };
-
-            const performUpdate = (uid) => {
-                // Update doesn't seemingly take trust params in same way, but usually inherits or we just update code.
-                // Minima help: mds action:update uid:.. file:.. [trust:..]
-                const trustParams = writeMode ? ' trust:write' : '';
-                const command = `mds action:update uid:"${uid}" file:"${filePath}"${trustParams}`;
-                const actionLabel = "Update";
-
-                sendAction(id, command, actionLabel);
-            };
-
             const sendAction = (nodeId, cmd, label) => {
                 sendMinimaRpc(nodeId, cmd, (err, json) => {
                     if (err) {
                         io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Request Failed - ${err.message}`);
                     } else {
                         if (json.status) {
-                            const respStr = json.response ? JSON.stringify(json.response) : 'Done';
+                            const respStr = json.response ? (typeof json.response === 'string' ? json.response : JSON.stringify(json.response)) : 'Done';
                             io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Success - ${respStr}`);
                         } else {
                             const errStr = json.message || json.error || 'Unknown Error';
@@ -517,42 +502,42 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
                 });
             }
 
-            if (update) {
-                // 1. Find the dApp UID by name
-                const targetName = globalConfig.dappName;
-                if (!targetName) {
-                    io.emit('dapp-log', `\n[Batch] Node ${id}: Cannot update - No 'Dapp Name' configured in settings.`);
+            // 1. Check if dApp exists to decide between Install or Update
+            const targetName = globalConfig.dappName;
+            if (!targetName) {
+                io.emit('dapp-log', `\n[Batch] Node ${id}: Cannot deploy - No 'Dapp Name' configured in settings.`);
+                return;
+            }
+
+            sendMinimaRpc(id, 'mds', (err, json) => {
+                const trustParams = writeMode ? ' trust:write' : '';
+
+                if (err || !json.status || !json.response) {
+                    // Fallback to fresh install if check fails (might be clean node)
+                    const command = `mds action:install file:"${filePath}"${trustParams}`;
+                    sendAction(id, command, "Install");
                     return;
                 }
 
-                // Get list of dapps
-                sendMinimaRpc(id, 'mds', (err, json) => {
-                    if (err || !json.status || !json.response) {
-                        io.emit('dapp-log', `\n[Batch] Node ${id}: Failed to fetch dApps list for update check.`);
-                        return;
-                    }
+                const dapps = json.response;
+                const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
 
-                    const dapps = json.response;
-                    const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
-
-                    const foundDapp = list.find(d => {
-                        const name = d.conf ? d.conf.name : d.name;
-                        return name && name.toLowerCase() === targetName.toLowerCase();
-                    });
-
-                    if (foundDapp) {
-                        const uid = foundDapp.uid;
-                        io.emit('dapp-log', `\n[Batch] Node ${id}: Found dApp '${targetName}' (UID: ${uid}). Updating...`);
-                        performUpdate(uid);
-                    } else {
-                        io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${targetName}' not found. Cannot update. (To install fresh, uncheck Update)`);
-                    }
+                const foundDapp = list.find(d => {
+                    const name = d.conf ? d.conf.name : d.name;
+                    return name && name.toLowerCase() === targetName.toLowerCase();
                 });
 
-            } else {
-                // FRESH INSTALL
-                performInstall();
-            }
+                if (foundDapp) {
+                    const uid = foundDapp.uid;
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: Found dApp '${targetName}' (${uid.substring(0, 8)}). Updating...`);
+                    const command = `mds action:update uid:"${uid}" file:"${filePath}"${trustParams}`;
+                    sendAction(id, command, "Update");
+                } else {
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${targetName}' not found. Installing fresh...`);
+                    const command = `mds action:install file:"${filePath}"${trustParams}`;
+                    sendAction(id, command, "Install");
+                }
+            });
         });
     });
 
@@ -680,10 +665,8 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         // Execute the centralized build script from MinimaNodeManager/scripts
         const scriptPath = './scripts/build_android_clean.sh';
         // Command format: ./scripts/build_android_clean.sh <PROJECT_DIR> <ADB_PATH> [DEVICE_ID]
-        let innerCommand = `${scriptPath} "${cwd}" "${adb}"`;
-        if (deviceId) {
-            innerCommand += ` "${deviceId}"`;
-        }
+        // Force --no-install as we now separate build and install
+        let innerCommand = `${scriptPath} "${cwd}" "${adb}" "--no-install"`;
 
         const command = `sudo -u ${sudoUser} ${innerCommand}`;
 
@@ -724,10 +707,8 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
         // Execute the centralized build script
         const scriptPath = './scripts/build_android_clean.sh';
-        let innerCommand = `${scriptPath} "${cwd}" "${adb}"`;
-        if (deviceId) {
-            innerCommand += ` "${deviceId}"`;
-        }
+        // Use --no-install flag to separate build and deploy stages
+        let innerCommand = `${scriptPath} "${cwd}" "${adb}" "--no-install"`;
 
         const command = `sudo -u ${sudoUser} ${innerCommand} && cd ${cwd} && sudo -u ${sudoUser} npm run minima:zip`;
 
