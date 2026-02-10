@@ -130,9 +130,7 @@ window.openTab = function (evt, tabName) {
     }
 
     if (tabName === 'tab-build') {
-        if (typeof socket !== 'undefined') {
-            socket.emit('get-adb-devices');
-        }
+        // No longer need to fetch ADB devices here as build is source-only
     }
 };
 
@@ -536,29 +534,6 @@ saveConfigBtn.onclick = () => {
     socket.emit('update-config', globalConfig);
 };
 
-// Separate save button for ADB config in Build & Zip tab
-const saveAdbConfigBtn = document.getElementById('save-adb-config-btn');
-if (saveAdbConfigBtn) {
-    saveAdbConfigBtn.onclick = () => {
-        const adbValue = configAdbPathInput.value.trim() || 'adb';
-        globalConfig.adbPath = adbValue;
-        addToGlobalLog(`[Config] ADB Path saved: ${globalConfig.adbPath}`);
-        socket.emit('update-config', globalConfig);
-
-        // Visual feedback
-        const originalText = saveAdbConfigBtn.textContent;
-        const originalBg = saveAdbConfigBtn.style.backgroundColor;
-        saveAdbConfigBtn.textContent = '✓ Saved';
-        saveAdbConfigBtn.style.backgroundColor = '#10b981'; // green
-        saveAdbConfigBtn.disabled = true;
-
-        setTimeout(() => {
-            saveAdbConfigBtn.textContent = originalText;
-            saveAdbConfigBtn.style.backgroundColor = originalBg;
-            saveAdbConfigBtn.disabled = false;
-        }, 1500);
-    };
-}
 
 // Vite Controls
 if (startViteBtn) {
@@ -619,25 +594,12 @@ const dappWriteModeCheck = document.getElementById('dapp-write-mode-check');
 
 batchInstallBtn.onclick = () => {
     const logObj = document.getElementById('dapp-log');
-    if (logObj) logObj.textContent = 'Starting Install Process...\n';
+    if (logObj) logObj.textContent = 'Starting Smart Deployment Process...\n';
 
     const filePath = dappLocationConfigInput.value.trim();
     const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
     if (filePath) {
         socket.emit('batch-dapp-install', { filePath, writeMode });
-    } else {
-        alert('Please specify the dApp Build Location file path.');
-    }
-};
-
-batchUpdateBtn.onclick = () => {
-    const logObj = document.getElementById('dapp-log');
-    if (logObj) logObj.textContent = 'Starting Update Process...\n';
-
-    const filePath = dappLocationConfigInput.value.trim();
-    const writeMode = dappWriteModeCheck ? dappWriteModeCheck.checked : false;
-    if (filePath) {
-        socket.emit('batch-dapp-install', { filePath, update: true, writeMode });
     } else {
         alert('Please specify the dApp Build Location file path.');
     }
@@ -928,24 +890,24 @@ if (buildZipBtn) {
 
 if (buildAndroidBtn) {
     buildAndroidBtn.onclick = () => {
-        const deviceId = getSelectedAdbDevice('build');
-        buildOutputObj.textContent = 'Starting Refined Android Build & Install process (Clean Pipeline)...\n';
+        buildOutputObj.textContent = 'Starting Refined Android Build process (Clean Pipeline)...\n';
         buildAndroidBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildFullBtn) buildFullBtn.disabled = true;
-        socket.emit('run-android-build', { deviceId });
+        // Server will now force --no-install
+        socket.emit('run-android-build');
     };
 }
 
 const buildFullBtn = document.getElementById('build-full-btn');
 if (buildFullBtn) {
     buildFullBtn.onclick = () => {
-        const deviceId = getSelectedAdbDevice('build');
         buildOutputObj.textContent = 'Starting Refined Build All process (Clean Pipeline: MiniDapp + Android)...\n';
         buildFullBtn.disabled = true;
         if (buildZipBtn) buildZipBtn.disabled = true;
         if (buildAndroidBtn) buildAndroidBtn.disabled = true;
-        socket.emit('run-full-build', { deviceId });
+        // Server will now force --no-install
+        socket.emit('run-full-build');
     };
 }
 

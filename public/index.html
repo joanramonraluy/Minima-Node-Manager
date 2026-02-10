@@ -26,7 +26,7 @@
                     <span class="icon">📦</span> dApp Manager
                 </button>
                 <button class="topbar-link" onclick="openTab(event, 'tab-build')">
-                    <span class="icon">🛠️</span> Run & Zip & APK
+                    <span class="icon">🛠️</span> Build Pipeline
                 </button>
                 <button class="topbar-link" onclick="openTab(event, 'tab-vite')">
                     <span class="icon">⚡</span> Vite Server
@@ -117,6 +117,15 @@
                                 class="command-input" style="width: 100%;">
                         </div>
                     </div>
+                    <div class="form-row">
+                        <label for="config-adb-path">ADB Path (for Android builds):</label>
+                        <div class="input-group">
+                            <input type="text" id="config-adb-path" value="adb" class="command-input"
+                                placeholder="adb or /path/to/android-sdk/platform-tools/adb">
+                            <button class="btn btn-neutral browse-btn" data-target="config-adb-path"
+                                data-type="file">Browse...</button>
+                        </div>
+                    </div>
 
                     <div style="text-align: right; margin-top: 10px;">
                         <button id="save-config-btn" class="btn btn-primary">Save Config</button>
@@ -178,10 +187,11 @@
 
                     <p class="description"
                         style="color: #aaa; font-size: 0.85rem; margin-bottom: 15px; line-height: 1.4;">
-                        <strong>Install:</strong> Uploads and installs the file to all selected nodes.<br>
-                        <strong>Update:</strong> Updates the existing MiniDapp on nodes while preserving data.<br>
-                        <strong>Push to Mobile:</strong> Installs or updates the MiniDapp within Minima on the mobile
-                        device.
+                        <strong>Install / Update:</strong> Smart deployment that automatically detects if the MiniDapp
+                        is already installed on each **active node**. Performs a fresh install if missing, or an
+                        update (preserving data) if present.<br>
+                        <strong>Push to Mobile:</strong> Installs or updates the MiniDapp within Minima on the **Target
+                        ADB Device** selected in the section below.
                     </p>
 
                     <div class="form-row">
@@ -194,13 +204,10 @@
                                 </label>
                             </div>
                             <button id="batch-install-btn" class="btn btn-primary"
-                                style="flex:1; min-width: 150px; max-width: 300px;">Install from
-                                Location</button>
-                            <button id="batch-update-btn" class="btn btn-secondary"
-                                style="flex:1; min-width: 150px; max-width: 300px;">Update from
+                                style="flex:1; min-width: 200px; max-width: 400px;">Install / Update from
                                 Location</button>
                             <button id="mobile-push-btn" class="btn btn-purple"
-                                style="flex:1; min-width: 150px; max-width: 300px; background-color: #f72585;">Push to
+                                style="flex:1; min-width: 200px; max-width: 400px; background-color: #f72585;">Push to
                                 Mobile
                                 (ADB)</button>
                         </div>
@@ -249,6 +256,13 @@
                         </div>
                     </div>
 
+                    <p class="description"
+                        style="color: #aaa; font-size: 0.85rem; margin-bottom: 20px; line-height: 1.4;">
+                        <strong>Install / Update APK:</strong> Uploads and reinstalls the APK on the device.
+                        Android will treat this as an update if the app is already present.<br>
+                        <strong>Uninstall APK:</strong> Completely removes the application from the device.
+                    </p>
+
                     <div style="border-bottom: 1px solid #333; margin-bottom: 20px; padding-bottom: 20px;">
                         <h4 style="color: #aaa; margin: 0 0 15px 0;">APK Installation</h4>
                         <div class="form-row">
@@ -258,9 +272,12 @@
                                     placeholder="/path/to/your/app.apk">
                                 <button class="btn btn-neutral browse-btn" data-target="apk-location-input"
                                     data-type="file">Browse...</button>
-                                <button id="apk-install-btn" class="btn btn-green"
-                                    style="background-color: #3ddc84; color: #000;">Install APK</button>
                             </div>
+                        </div>
+                        <div class="button-group" style="margin-top: 15px;">
+                            <button id="apk-install-btn" class="btn btn-green"
+                                style="background-color: #3ddc84; color: #000; flex: 1; max-width: 400px;">Install /
+                                Update APK</button>
                         </div>
 
                         <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #222;">
@@ -316,39 +333,7 @@
             <!-- Tab Content: Build & Zip -->
             <div id="tab-build" class="tab-content">
                 <div class="control-panel">
-                    <h3>Build & Zip dApp</h3>
-                    <div class="form-row">
-                        <label for="adb-device-select-build">Target ADB Device:</label>
-                        <div class="input-group">
-                            <select id="adb-device-select-build" class="command-input adb-device-select"
-                                style="flex: 1;">
-                                <option value="">Auto (single device)</option>
-                                <option value="manual">-- Enter Manually --</option>
-                            </select>
-                            <button class="btn btn-secondary refresh-adb-devices-btn">
-                                🔄 Refresh
-                            </button>
-                        </div>
-                    </div>
-                    <div id="manual-device-id-container-build" class="form-row"
-                        style="margin-top: 10px; display: none;">
-                        <label for="manual-device-id-build">Device Serial:</label>
-                        <input type="text" id="manual-device-id-build" class="command-input"
-                            placeholder="e.g. emulator-5554">
-                    </div>
-                    <div class="form-row">
-                        <label>ADB Path (for Android builds):</label>
-                        <div class="input-group">
-                            <input type="text" id="config-adb-path" value="adb" class="command-input"
-                                placeholder="adb or /path/to/android-sdk/platform-tools/adb">
-                            <button class="btn btn-neutral browse-btn" data-target="config-adb-path"
-                                data-type="file">Browse...</button>
-                            <button id="save-adb-config-btn" class="btn btn-primary">Save</button>
-                        </div>
-                        <small style="color: #888; display: block; margin-top: 5px;">
-                            Default: "adb" (uses system PATH). Common location: ~/Android/Sdk/platform-tools/adb
-                        </small>
-                    </div>
+                    <h3>Build Pipeline (Source to Artifact)</h3>
                     <div class="form-row">
                         <label>Build Workspace:</label>
                         <div class="input-group">
@@ -358,22 +343,21 @@
                         </div>
                     </div>
                     <p class="description"><strong>Build & Zip:</strong> Compiles the web app (`npm run build`) and
-                        creates the MiniDapp package (`.mds.zip`). Ideal for manual node/MDS uploads.
+                        creates the MiniDapp package (`.mds.zip`).
                     </p>
-                    <p class="description"><strong>Build & Install Android APK:</strong> Compiles the project and
-                        installs the debug APK on the selected device. Does <strong>NOT</strong> update the `.mds.zip`
-                        file.
+                    <p class="description"><strong>Build Android APK:</strong> Compiles the project and
+                        generates the debug APK.
                     </p>
-                    <p class="description"><strong>Build All, Install & Zip:</strong> The complete pipeline. Builds the
-                        APK, installs it, AND generates the updated `.mds.zip` file.
+                    <p class="description"><strong>Build All (Zip + APK):</strong> The complete build pipeline.
+                        Generates both the `.mds.zip` and the Android APK.
                     </p>
                     <div class="button-group">
                         <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
                             & Zip</button>
                         <button id="build-android-btn" class="btn btn-green"
-                            style="background-color: #3ddc84; color: #000;">Build & Install Android APK</button>
+                            style="background-color: #3ddc84; color: #000;">Build Android APK</button>
                         <button id="build-full-btn" class="btn btn-blue"
-                            style="background-color: #3a86ff; color: #fff;">Build All, Install & Zip</button>
+                            style="background-color: #3a86ff; color: #fff;">Build All (Zip + APK)</button>
                     </div>
                     <div class="build-output-container">
                         <div class="output-header">
