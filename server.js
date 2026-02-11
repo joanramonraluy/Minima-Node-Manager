@@ -63,6 +63,17 @@ function saveConfig() {
     }
 }
 
+// Global ADB Environment Helper
+function getAdbEnv() {
+    const adbEnv = { ...process.env };
+    if (process.env.SUDO_USER) {
+        adbEnv.HOME = `/home/${process.env.SUDO_USER}`;
+    } else {
+        adbEnv.HOME = '/root';
+    }
+    return adbEnv;
+}
+
 // Serve static files from 'public' directory
 app.use(express.static('public'));
 
@@ -754,7 +765,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             adbEnv.HOME = '/root';
         }
 
-        const deviceList = spawn(adb, ['devices'], { env: adbEnv });
+        const deviceList = spawn(adb, ['devices'], { env: getAdbEnv() });
 
         let stdout = '';
         let stderr = '';
@@ -817,8 +828,8 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             io.emit('build-output', `[System] Target Device: Auto\n\n`);
         }
 
-        const args = deviceId ? ['-s', deviceId, 'install', '-r', filePath] : ['install', '-r', filePath];
-        const install = spawn(adb, args);
+        const args = deviceId ? ['-s', deviceId, 'install', '-r', '-d', filePath] : ['install', '-r', '-d', filePath];
+        const install = spawn(adb, args, { env: getAdbEnv() });
 
         install.stdout.on('data', (data) => {
             io.emit('build-output', data.toString());
@@ -865,7 +876,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         }
 
         const args = deviceId ? ['-s', deviceId, 'push', localPath, remotePath] : ['push', localPath, remotePath];
-        const push = spawn(adb, args);
+        const push = spawn(adb, args, { env: getAdbEnv() });
 
         push.stdout.on('data', (data) => {
             io.emit('build-output', data.toString());
@@ -909,7 +920,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         }
 
         const args = deviceId ? ['-s', deviceId, 'uninstall', packageName] : ['uninstall', packageName];
-        const uninstall = spawn(adb, args);
+        const uninstall = spawn(adb, args, { env: getAdbEnv() });
 
         uninstall.stdout.on('data', (data) => {
             io.emit('build-output', data.toString());
@@ -992,7 +1003,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
                 });
 
                 // Try common Minima ports (9005=RPC, 9001=RPC, 9003=MDS SSL, 9004=MDS)
-                const portsToTry = [9005, 9001, 9003, 9004, 9002];
+                const portsToTry = [9005];
 
                 for (const port of portsToTry) {
                     if (rpcSuccess) break;

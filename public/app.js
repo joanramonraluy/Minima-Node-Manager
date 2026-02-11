@@ -706,6 +706,7 @@ batchUninstallBtn.onclick = () => {
 
 // Generic APK Install
 let isApkInstalling = false;
+let isApkUninstalling = false;
 const apkLocationInput = document.getElementById('apk-location-input');
 const apkInstallBtn = document.getElementById('apk-install-btn');
 
@@ -728,7 +729,9 @@ if (apkInstallBtn) {
 
     socket.on('build-complete', () => {
         if (apkInstallBtn) apkInstallBtn.disabled = false;
+        if (uninstallAdbBtn) uninstallAdbBtn.disabled = false;
         isApkInstalling = false;
+        isApkUninstalling = false;
     });
 }
 
@@ -777,6 +780,7 @@ if (apkUninstallBtn) {
             const dappLog = document.getElementById('dapp-log');
             if (dappLog) dappLog.textContent = `Starting APK uninstallation for: ${packageName}...\n`;
 
+            isApkUninstalling = true;
             apkUninstallBtn.disabled = true;
             socket.emit('run-adb-uninstall', { packageName, deviceId });
         } else {
@@ -786,6 +790,7 @@ if (apkUninstallBtn) {
 
     socket.on('build-complete', () => {
         if (apkUninstallBtn) apkUninstallBtn.disabled = false;
+        isApkUninstalling = false;
     });
 }
 
@@ -924,17 +929,12 @@ if (copyBuildOutputBtn) {
 }
 
 socket.on('build-output', (data) => {
-    buildOutputObj.textContent += data;
-    // Auto scroll
-    buildOutputObj.scrollTop = buildOutputObj.scrollHeight;
+    // Both build-output and dApp log should use appendLog for consistency
+    appendLog('build-output', data, false);
 
-    // Mirror to dApp log if APK is installing or ADB push is running
-    if (isApkInstalling || isAdbPushing) {
-        const dappLog = document.getElementById('dapp-log');
-        if (dappLog) {
-            dappLog.textContent += data;
-            dappLog.scrollTop = dappLog.scrollHeight;
-        }
+    // Mirror to dApp log if APK is installing, uninstalling or ADB push is running
+    if (isApkInstalling || isApkUninstalling || isAdbPushing) {
+        appendLog('dapp-log', data, false);
     }
 });
 
@@ -1316,20 +1316,26 @@ socket.on('dapp-log', (content) => {
 });
 
 // Helper Function
-function appendLog(elementId, content) {
+function appendLog(elementId, content, addNewline = true) {
     const logContainer = document.getElementById(elementId);
     if (!logContainer) return;
 
-    // Check if user is near the bottom (within 50px tolerance)
-    const threshold = 50;
+    // Check if user is near the bottom (within 100px tolerance)
+    const threshold = 100;
     const isNearBottom = logContainer.scrollHeight - logContainer.scrollTop - logContainer.clientHeight <= threshold;
 
     // Append text safely
-    logContainer.textContent += content + '\n';
+    logContainer.textContent += content + (addNewline ? '\n' : '');
 
     // If we were near bottom (or it was empty/small), force scroll to bottom
     if (isNearBottom) {
-        logContainer.scrollTop = logContainer.scrollHeight;
+        const doScroll = () => {
+            logContainer.scrollTop = logContainer.scrollHeight;
+        };
+        // Use requestAnimationFrame AND a short timeout to ensure the DOM is ready
+        requestAnimationFrame(doScroll);
+        setTimeout(doScroll, 10);
+        setTimeout(doScroll, 50); // Final check for heavy renders
     }
 }
 // Wrap existing addToGlobalLog if it exists, or just ensure global-log socket uses separate function.

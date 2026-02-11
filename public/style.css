@@ -325,6 +325,7 @@ details.control-panel[open] summary::after {
     font-size: 0.85rem;
     color: #eee;
     white-space: pre-wrap;
+    word-break: break-all;
 }
 
 /* Fixed Global Log Styles Removed - Replaced with Inline Logs */
@@ -333,8 +334,7 @@ details.control-panel[open] summary::after {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     margin-bottom: 20px;
-    overflow: hidden;
-    /* Ensure rounded corners */
+    /* overflow: hidden removed to prevent scrollbar clipping */
 }
 
 .log-header {
