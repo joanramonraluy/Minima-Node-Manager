@@ -25,6 +25,18 @@ if ! ip netns list | grep -q "$NS"; then
     ip netns exec $NS ip link set lo up
 fi
 
+# Ensure Bridge exists
+if ! ip link show $BRIDGE > /dev/null 2>&1; then
+    echo "Creating bridge $BRIDGE..."
+    ip link add name $BRIDGE type bridge
+    ip addr add $GW/24 dev $BRIDGE
+    ip link set $BRIDGE up
+    # Enable IP forwarding (optional but good for internet access)
+    sysctl -w net.ipv4.ip_forward=1 > /dev/null
+    # Simple NAT masquerade (optional)
+    # iptables -t nat -A POSTROUTING -s 10.0.0.0/24 ! -d 10.0.0.0/24 -j MASQUERADE
+fi
+
 # Create veth pair if not exists
 if ! ip link show $VETH > /dev/null 2>&1; then
     echo "Creating veth pair $VETH <-> $VETH_PEER..."
@@ -99,10 +111,4 @@ exec ip netns exec $NS java -jar ./minima.jar \
   $clean_flag \
   $genesis_flag \
   $connect_flag \
-  $other_flags \
-  -mdspassword 123 \
-  -allowallip \
-  -rpcenable \
-  -rpcssl \
-  -rpccrlf \
-  -showparams | tee "$DATA_NAME/startup.log"
+  $other_flags | tee "$DATA_NAME/startup.log"

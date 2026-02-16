@@ -393,6 +393,10 @@
 
                 <!-- Checkboxes -->
                 <div class="control-group">
+                    <label class="checkbox-container" style="color: #fab005;"
+                        title="Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.">
+                        <input type="checkbox" class="host-check"> Host Network Mode
+                    </label>
                     <label class="checkbox-container">
                         <input type="checkbox" class="clean-check"> Clean Mode
                     </label>
@@ -421,8 +425,18 @@
                         <label><input type="checkbox" class="param-check" value="-archive"> -archive</label>
                         <label><input type="checkbox" class="param-check" value="-rpcenable" checked>
                             -rpcenable</label>
+                        <label><input type="checkbox" class="param-check" value="-rpcssl" checked> -rpcssl</label>
+                        <label><input type="checkbox" class="param-check" value="-rpccrlf" checked> -rpccrlf</label>
+                        <label><input type="checkbox" class="param-check" value="-allowallip" checked>
+                            -allowallip</label>
+                        <label><input type="checkbox" class="param-check" value="-showparams" checked>
+                            -showparams</label>
+                        <label><input type="checkbox" class="param-check" value="-mdspassword 123" checked> -mdspassword
+                            123</label>
                     </div>
                 </details>
+
+
 
                 <!-- Action Buttons -->
                 <div class="action-buttons">
@@ -461,6 +475,9 @@
                 <!-- Global Controls -->
                 <div class="control-group"
                     style="margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                    <label class="checkbox-container" style="color: #fab005;">
+                        <input type="checkbox" id="global-host-check"> Host Network Mode
+                    </label>
                     <label class="checkbox-container">
                         <input type="checkbox" id="global-clean-check" checked> Clean Mode
                     </label>
@@ -492,6 +509,26 @@
                     </small>
                 </div>
 
+                <!-- Global Mainnet / Testnet Switch -->
+                <div class="form-row"
+                    style="background: #222; padding: 15px; border-radius: 4px; border: 1px solid #444; margin-bottom: 15px;">
+                    <label style="flex: 1; font-weight: bold; color: #fff;">Network Mode:</label>
+                    <div style="flex: 2; display: flex; gap: 20px; align-items: center;">
+                        <label class="radio-container">
+                            <input type="radio" name="global-network-mode" value="testnet" checked>
+                            Priv Testnet (Standard)
+                        </label>
+                        <label class="radio-container">
+                            <input type="radio" name="global-network-mode" value="mainnet">
+                            🌍 Mainnet (Public)
+                        </label>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #aaa; margin-top: 10px; width: 100%;">
+                        <strong>Testnet:</strong> Private network, isolated, usesGenesis.<br>
+                        <strong>Mainnet:</strong> Public network, connects to megammr, disables -test.
+                    </div>
+                </div>
+
                 <!-- Global Advanced Options -->
                 <details class="advanced-options" style="margin-bottom: 15px;">
                     <summary>Advanced Params (Global)</summary>
@@ -511,12 +548,22 @@
                             -archive</label>
                         <label><input type="checkbox" class="global-param-check" value="-rpcenable" checked>
                             -rpcenable</label>
+                        <label><input type="checkbox" class="global-param-check" value="-rpcssl" checked>
+                            -rpcssl</label>
+                        <label><input type="checkbox" class="global-param-check" value="-rpccrlf" checked>
+                            -rpccrlf</label>
+                        <label><input type="checkbox" class="global-param-check" value="-allowallip" checked>
+                            -allowallip</label>
+                        <label><input type="checkbox" class="global-param-check" value="-showparams" checked>
+                            -showparams</label>
+                        <label><input type="checkbox" class="global-param-check" value="-mdspassword 123" checked>
+                            -mdspassword 123</label>
                     </div>
                 </details>
 
                 <label for="global-cmd-template">Command Template ($ID will be replaced):</label>
                 <input type="text" id="global-cmd-template"
-                    value="./scripts/start_node.sh $ID -clean -genesis -mdsenable -test -rpcenable"
+                    value="./scripts/start_node.sh $ID -clean -genesis -mdsenable -test -rpcenable -rpcssl -rpccrlf -allowallip -showparams -mdspassword 123"
                     class="command-input" style="width: 100%; margin-bottom: 10px;">
                 <button id="apply-global-cmd-btn" class="btn btn-secondary" style="width: 100%;">Apply to All
                     Nodes</button>

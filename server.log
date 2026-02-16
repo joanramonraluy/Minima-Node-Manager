@@ -1,20 +1,2 @@
-Loaded configuration from config.json
-Server running at http://localhost:3000
-Remember to connect to: http://localhost:3000
-Running Auto Network Setup...
-Opening browser at http://localhost:3000...
-Opening browser at http://localhost:3000...
-[ADB] Fetching devices using path: /home/joanramon/Android/Sdk/platform-tools/adb
-[ADB] devices output:
-List of devices attached
-1dd244d9	device
-
-
-[ADB] Found 1 devices: [{"id":"1dd244d9","status":"device"}]
-[ADB] Fetching devices using path: /home/joanramon/Android/Sdk/platform-tools/adb
-[ADB] devices output:
-List of devices attached
-1dd244d9	device
-
-
-[ADB] Found 1 devices: [{"id":"1dd244d9","status":"device"}]
+sudo: cal una terminal per llegir la contrasenya; o bé useu l'opció -S per llegir de l'entrada estàndard o configureu un assistent askpass
+sudo: es requereix una contrasenya

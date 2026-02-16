@@ -24,6 +24,7 @@ const NODE_COUNT = 26; // Support A-Z
 const sudoUser = process.env.SUDO_USER || 'joanramon';
 // Store running processes: { id: process }
 const nodeProcesses = {};
+const nodeTypes = {}; // 'virtual' | 'host'
 
 // Server-side Config State
 const CONFIG_FILE = path.join(__dirname, 'config.json');
@@ -80,6 +81,11 @@ app.use(express.static('public'));
 // Process Management
 function startNode(id, options = {}) {
     if (nodeProcesses[id]) return; // Already running
+
+    // Determine type
+    const isHost = options.isHost === true;
+    nodeTypes[id] = isHost ? 'host' : 'virtual';
+    console.log(`[System] Starting Node ${id} (Type: ${nodeTypes[id]})`);
 
     let cmd = './scripts/start_node.sh';
     let args = [];
@@ -147,8 +153,11 @@ function startNode(id, options = {}) {
 
 function stopNode(id) {
     if (nodeProcesses[id]) {
-        // Use the helper script to kill the process inside the namespace
-        const stopScript = spawn('./scripts/stop_node.sh', [id]);
+        // Determine script based on type
+        const type = nodeTypes[id] || 'virtual';
+        const script = type === 'host' ? './scripts/stop_host_node.sh' : './scripts/stop_node.sh';
+
+        const stopScript = spawn(script, [id]);
 
         stopScript.stdout.on('data', (d) => {
             io.emit('log-update', { id, type: 'system', content: d.toString() });
@@ -183,9 +192,9 @@ io.on('connection', (socket) => {
     // Handle Start Node
     socket.on('start-node', (data) => {
         // Handle both legacy (options object) and new (command string) formats
-        // Handle both legacy (options object) and new (command string) formats
         const opts = data.command ? { command: data.command } : data.options || {};
         if (data.autoName) opts.autoName = true;
+        if (data.isHost) opts.isHost = true; // Pass through host flag
         startNode(data.id, opts);
     });
 
@@ -268,73 +277,66 @@ io.on('connection', (socket) => {
         const targetDappName = dappName || globalConfig.dappName;
 
         // ... (rest of export logic)
-        const idStr = id.toString();
-        const nodeIp = `10.0.0.${10 + parseInt(id)}`;
+        // Clean up duplicate declarations
+        // (Block removed to fix redeclaration error)
 
-        const rpcOptions = {
-            hostname: nodeIp,
-            port: 9005,
-            path: '/mds',
-            method: 'GET',
-            rejectUnauthorized: false,
-            headers: {
-                'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64')
+        // Use sendMinimaRpc to abstract Host/Virtual logic
+        const command = 'mds';
+
+        sendMinimaRpc(id, command, (err, json) => {
+            if (err) {
+                io.emit('vite-log', `[Error] RPC Request failed for Node ${id}: ${err.message}. Is -allowallip enabled?`);
+                return;
             }
-        };
 
-        const req = https.request(rpcOptions, res => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(body);
-                    if (json.status && json.response) {
-                        const dapps = json.response;
-                        let sessionUid = '';
-                        const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+            try {
+                if (json.status && json.response) {
+                    const dapps = json.response;
+                    let sessionUid = '';
+                    const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
 
-                        const targetDapp = list.find(d => {
-                            const name = d.conf ? d.conf.name : d.name;
-                            return name && name.toLowerCase() === targetDappName.toLowerCase();
-                        });
+                    const targetDapp = list.find(d => {
+                        const name = d.conf ? d.conf.name : d.name;
+                        return name && name.toLowerCase() === targetDappName.toLowerCase();
+                    });
 
-                        if (targetDapp) {
-                            sessionUid = targetDapp.sessionid || targetDapp.uid;
-                        } else {
-                            const availableNames = list.map(d => d.conf ? d.conf.name : d.name).join(', ');
-                            io.emit('vite-log', `[Error] Dapp '${targetDappName}' not found on Node ${id} (Available: ${availableNames})`);
-                            return;
-                        }
+                    if (targetDapp) {
+                        sessionUid = targetDapp.sessionid || targetDapp.uid;
+                    } else {
+                        const availableNames = list.map(d => d.conf ? d.conf.name : d.name).join(', ');
+                        io.emit('vite-log', `[Error] Dapp '${targetDappName}' not found on Node ${id} (Available: ${availableNames})`);
+                        return;
+                    }
 
-                        const envContent = `VITE_DEBUG=true
+                    // For .env, we need to know the IP and Port
+                    // Get them just like sendMinimaRpc does
+                    const type = nodeTypes[id] || 'virtual';
+                    const nodeIp = type === 'host' ? '127.0.0.1' : `10.0.0.${10 + parseInt(id)}`;
+                    const mdsPort = type === 'host' ? (9003 + (parseInt(id) - 1) * 100) : 9003;
+
+                    const envContent = `VITE_DEBUG=true
 VITE_DEBUG_HOST=${nodeIp}
 #Node${id}
-VITE_DEBUG_MDS_PORT=9003
+VITE_DEBUG_MDS_PORT=${mdsPort}
 VITE_DEBUG_SESSION_ID=${sessionUid}
 `;
-                        const finalPath = targetPath || globalConfig.envPath;
+                    const finalPath = targetPath || globalConfig.envPath;
 
-                        fs.writeFile(finalPath, envContent, err => {
-                            if (err) {
-                                io.emit('vite-log', `[Error] Failed to write .env: ${err.message}`);
-                            } else {
-                                io.emit('vite-log', `[Success] Exported .env for Node ${id} to ${finalPath}`);
-                            }
-                        });
+                    fs.writeFile(finalPath, envContent, err => {
+                        if (err) {
+                            io.emit('vite-log', `[Error] Failed to write .env: ${err.message}`);
+                        } else {
+                            io.emit('vite-log', `[Success] Exported .env for Node ${id} to ${finalPath}`);
+                        }
+                    });
 
-                    } else {
-                        io.emit('vite-log', `[Error] Invalid RPC response from Node ${id}`);
-                    }
-                } catch (e) {
-                    io.emit('vite-log', `[Error] Failed to parse RPC from Node ${id}: ${e.message}`);
+                } else {
+                    io.emit('vite-log', `[Error] Invalid RPC response from Node ${id}`);
                 }
-            });
+            } catch (e) {
+                io.emit('vite-log', `[Error] Failed to process RPC response from Node ${id}: ${e.message}`);
+            }
         });
-
-        req.on('error', e => {
-            io.emit('vite-log', `[Error] RPC Request failed for Node ${id}: ${e.message}. Is -allowallip enabled?`);
-        });
-        req.end();
     });
 
     // Vite Server Management
@@ -422,6 +424,7 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
 
     // Get dApps List (Query first available running node)
+    // Get dApps List (Query first available running node)
     socket.on('get-dapps', () => {
         // Find a running node
         const runningNodeId = Object.keys(nodeProcesses).find(id => nodeProcesses[id]);
@@ -432,51 +435,35 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             return;
         }
 
-        const idStr = runningNodeId.toString();
-        const nodeIp = `10.0.0.${10 + parseInt(runningNodeId)}`;
+        // Use sendMinimaRpc to abstract Host/Virtual logic
+        sendMinimaRpc(runningNodeId, 'mds', (err, json) => {
+            if (err) {
+                io.emit('dapp-log', `[Error] Request failed: ${err.message}`);
+                io.emit('dapp-list', []);
+                return;
+            }
 
-        const rpcOptions = {
-            hostname: nodeIp,
-            port: 9005,
-            path: '/mds',
-            method: 'GET',
-            rejectUnauthorized: false,
-            headers: { 'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64') }
-        };
+            try {
+                if (json.status && json.response) {
+                    const dapps = json.response;
+                    const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
 
-        const req = https.request(rpcOptions, res => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(body);
-                    if (json.status && json.response) {
-                        const dapps = json.response;
-                        const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+                    const simplifiedList = list.map(d => ({
+                        name: d.conf ? d.conf.name : d.name,
+                        uid: d.uid,
+                        version: d.conf ? d.conf.version : d.version
+                    }));
 
-                        const simplifiedList = list.map(d => ({
-                            name: d.conf ? d.conf.name : d.name,
-                            uid: d.uid,
-                            version: d.conf ? d.conf.version : d.version
-                        }));
-
-                        io.emit('dapp-list', simplifiedList);
-                    } else {
-                        io.emit('dapp-log', `[Error] Failed to fetch dApps from Node ${runningNodeId}`);
-                        io.emit('dapp-list', []);
-                    }
-                } catch (e) {
-                    io.emit('dapp-log', `[Error] Failed to parse response: ${e.message}`);
+                    io.emit('dapp-list', simplifiedList);
+                } else {
+                    io.emit('dapp-log', `[Error] Failed to fetch dApps from Node ${runningNodeId}`);
                     io.emit('dapp-list', []);
                 }
-            });
+            } catch (e) {
+                io.emit('dapp-log', `[Error] Failed to parse response: ${e.message}`);
+                io.emit('dapp-list', []);
+            }
         });
-
-        req.on('error', (e) => {
-            io.emit('dapp-log', `[Error] Request failed: ${e.message}`);
-            io.emit('dapp-list', []);
-        });
-        req.end();
     });
 
     socket.on('batch-dapp-install', (data) => {
@@ -1236,13 +1223,21 @@ server.listen(PORT, () => {
 
 // Helper for RPC commands (Global)
 function sendMinimaRpc(id, command, callback) {
-    const idStr = id.toString();
-    const nodeIp = `10.0.0.${10 + parseInt(id)}`;
+    // Determine target IP and Port based on Node Type
+    const type = nodeTypes[id] || 'virtual';
+    let nodeIp, rpcPort;
 
-    // Use Minima RPC on port 9005 (HTTPS)
+    if (type === 'host') {
+        nodeIp = '127.0.0.1';
+        rpcPort = 9005 + (parseInt(id) - 1) * 100;
+    } else {
+        nodeIp = `10.0.0.${10 + parseInt(id)}`;
+        rpcPort = 9005;
+    }
+
     const rpcOptions = {
         hostname: nodeIp,
-        port: 9005,
+        port: rpcPort,
         path: '/' + encodeURIComponent(command),
         method: 'GET',
         rejectUnauthorized: false,
@@ -1273,8 +1268,8 @@ function scheduleAutoName(id) {
     io.emit('log-update', { id, type: 'system', content: `[Auto-Name] Waiting for RPC to set name to '${name}'...\n` });
 
     let attempts = 0;
-    const maxAttempts = 15;
-    const intervalTime = 2000;
+    const maxAttempts = 20;
+    const intervalTime = 3000;
 
     const poller = setInterval(() => {
         attempts++;
@@ -1296,3 +1291,4 @@ function scheduleAutoName(id) {
 
     }, intervalTime);
 }
+

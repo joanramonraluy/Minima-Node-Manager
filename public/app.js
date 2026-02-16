@@ -177,6 +177,7 @@ function addNode() {
     };
 
     // Defaults
+    const hostCheck = card.querySelector('.host-check');
     const cleanCheck = card.querySelector('.clean-check');
     const genesisCheck = card.querySelector('.genesis-check');
     const genesisContainer = card.querySelector('.genesis-container');
@@ -206,6 +207,32 @@ function addNode() {
     const sendBtn = card.querySelector('.send-btn');
     const commandInput = card.querySelector('.command-bar .command-input');
     const disconnectBtn = card.querySelector('.disconnect-btn');
+    const mainnetPresetBtn = card.querySelector('.mainnet-preset-btn');
+
+    // ... existing button listeners ...
+
+    if (mainnetPresetBtn) {
+        mainnetPresetBtn.onclick = () => {
+            // preset: Real Node ON, Test OFF, Connect to Megammr
+            hostCheck.checked = true;
+
+            // Find -test checkbox and uncheck it
+            paramChecks.forEach(chk => {
+                if (chk.value.trim() === '-test') {
+                    chk.checked = false;
+                }
+            });
+
+            // Set connect to mainnet seed
+            if (i === 1) {
+                // Force show connect input for Node 1 if Mainnet
+                connectGroup.style.display = 'flex';
+            }
+            connectInput.value = 'megammr.minima.global:9001';
+
+            updateCommandPreview();
+        };
+    }
 
     // Start Command Preview Logic
     const startCmdPreview = card.querySelector('.start-cmd-preview');
@@ -214,9 +241,13 @@ function addNode() {
     function updateCommandPreview() {
         // If user manually edited, we might want to respect that?
         // For now, let's keep it simple: any checkbox change regenerates the command.
-        // If the user wants a custom command, they edit it and DON'T touch checkboxes after.
 
-        let cmd = `./scripts/start_node.sh ${i}`;
+        const isHost = hostCheck.checked;
+
+        // Auto-uncheck AND Disable Genesis logic REMOVED to allow Host + Genesis (Testnet)
+        // ...
+
+        let cmd = isHost ? `./scripts/start_host_node.sh ${i}` : `./scripts/start_node.sh ${i}`;
 
         if (cleanCheck.checked && cleanCheck.parentElement.style.display !== 'none') cmd += ' -clean';
         if (genesisCheck.checked && genesisContainer.style.display !== 'none') cmd += ' -genesis';
@@ -231,9 +262,48 @@ function addNode() {
         });
 
         startCmdPreview.value = cmd;
+
+        // Visual Updates for Host Node
+        const portBase = isHost ? 9001 + (i - 1) * 100 : 9001;
+        const ip = isHost ? '127.0.0.1' : `10.0.0.${10 + i}`;
+
+        // Update Port Display
+        card.querySelector('.ip-port').innerHTML = `${ip}:<span class="port-number">${portBase}</span>`;
+
+        // Update Web UI Link
+        const mdsPort = isHost ? 9003 + (i - 1) * 100 : 9003;
+        const nodeTitle = card.querySelector('.node-header h2');
+        nodeTitle.title = `Open https://${ip}:${mdsPort}`;
+        nodeTitle.onclick = () => window.open(`https://${ip}:${mdsPort}/`, '_blank');
+
+        // Update Connect Input placeholder/value if switching modes
+        if (i > 1) {
+            const node1Card = document.getElementById('node-1');
+            const node1IsHost = node1Card ? node1Card.querySelector('.host-check').checked : false;
+
+            let defaultTarget;
+            if (node1IsHost) {
+                // If Node 1 is Real, it's on the host. 
+                // Virtual nodes reach it via the gateway (10.0.0.1).
+                // Real nodes reach it via localhost.
+                defaultTarget = isHost ? '127.0.0.1:9001' : '10.0.0.1:9001';
+            } else {
+                // If Node 1 is Virtual, it's always at 10.0.0.11.
+                defaultTarget = '10.0.0.11:9001';
+            }
+
+            connectInput.placeholder = defaultTarget;
+
+            // Auto-update value ONLY if it was previously matching a default and the default changed
+            const oldValues = ['10.0.0.11:9001', '127.0.0.1:9001', '10.0.0.1:9001'];
+            if (oldValues.includes(connectInput.value)) {
+                connectInput.value = defaultTarget;
+            }
+        }
     }
 
     // Attach listeners to all inputs that affect the command
+    hostCheck.addEventListener('change', updateCommandPreview);
     cleanCheck.addEventListener('change', updateCommandPreview);
     genesisCheck.addEventListener('change', updateCommandPreview);
     connectInput.addEventListener('input', updateCommandPreview);
@@ -272,7 +342,7 @@ function addNode() {
         if (rawCommand) {
             const autoNameCheck = document.getElementById('auto-name-check');
             const autoName = autoNameCheck ? autoNameCheck.checked : false;
-            socket.emit('start-node', { id: i, command: rawCommand, autoName });
+            socket.emit('start-node', { id: i, command: rawCommand, isHost: hostCheck.checked, autoName });
         }
     };
 
@@ -727,11 +797,22 @@ if (apkInstallBtn) {
         }
     };
 
+    // Unified build-complete handler for all build/ADB operations
     socket.on('build-complete', () => {
+        // Build Pipeline Tab Buttons
+        if (buildZipBtn) buildZipBtn.disabled = false;
+        if (buildAndroidBtn) buildAndroidBtn.disabled = false;
+        if (buildFullBtn) buildFullBtn.disabled = false;
+
+        // dApp Manager Tab Buttons
         if (apkInstallBtn) apkInstallBtn.disabled = false;
-        if (uninstallAdbBtn) uninstallAdbBtn.disabled = false;
+        if (apkUninstallBtn) apkUninstallBtn.disabled = false;
+        if (adbPushBtn) adbPushBtn.disabled = false;
+
+        // Reset Flags
         isApkInstalling = false;
         isApkUninstalling = false;
+        isAdbPushing = false;
     });
 }
 
@@ -759,10 +840,7 @@ if (adbPushBtn) {
         }
     };
 
-    socket.on('build-complete', () => {
-        if (adbPushBtn) adbPushBtn.disabled = false;
-        isAdbPushing = false;
-    });
+    // (Unified handler above)
 }
 
 // Generic APK Uninstall
@@ -788,10 +866,7 @@ if (apkUninstallBtn) {
         }
     };
 
-    socket.on('build-complete', () => {
-        if (apkUninstallBtn) apkUninstallBtn.disabled = false;
-        isApkUninstalling = false;
-    });
+    // (Unified handler above)
 }
 
 if (refreshAdbPackagesBtn) {
@@ -939,9 +1014,6 @@ socket.on('build-output', (data) => {
 });
 
 socket.on('build-complete', (data) => {
-    if (buildZipBtn) buildZipBtn.disabled = false;
-    if (buildAndroidBtn) buildAndroidBtn.disabled = false;
-    if (buildFullBtn) buildFullBtn.disabled = false;
     const { success } = data;
     buildOutputObj.textContent += `\n=== Process ${success ? 'Completed Successfully' : 'Failed'} ===\n`;
 });
@@ -1350,27 +1422,58 @@ const applyGlobalCmdBtn = document.getElementById('apply-global-cmd-btn');
 const globalCmdTemplateInput = document.getElementById('global-cmd-template');
 
 // Global Params Elements
+// Global Params Elements
+const globalHostCheck = document.getElementById('global-host-check');
 const globalCleanCheck = document.getElementById('global-clean-check');
 const globalGenesisCheck = document.getElementById('global-genesis-check');
 const globalConnectInput = document.getElementById('global-connect-input');
 // Note: We need to use a static NodeList or re-query if dynamic, but these are static in HTML now
 const globalParamChecks = document.querySelectorAll('.global-param-check');
+const globalNetworkRadios = document.querySelectorAll('input[name="global-network-mode"]');
 
 function updateGlobalTemplate() {
-    let cmd = './scripts/start_node.sh $ID';
+    let script = './scripts/start_node.sh';
+    if (globalHostCheck && globalHostCheck.checked) {
+        script = './scripts/start_host_node.sh';
+    }
+    let cmd = `${script} $ID`;
 
-    // Add Clean/Genesis if checked
+    // Check Network Mode
+    let isMainnet = false;
+    globalNetworkRadios.forEach(r => {
+        if (r.checked && r.value === 'mainnet') isMainnet = true;
+    });
+
+    // Add Clean/Genesis
     if (globalCleanCheck && globalCleanCheck.checked) cmd += ' -clean';
-    if (globalGenesisCheck && globalGenesisCheck.checked) cmd += ' -genesis';
+    // Genesis only if NOT Mainnet (Mainnet never uses Genesis)
+    if (!isMainnet && globalGenesisCheck && globalGenesisCheck.checked) cmd += ' -genesis';
 
-    // Add Connect if present
-    if (globalConnectInput && globalConnectInput.value.trim()) {
-        cmd += ` -connect ${globalConnectInput.value.trim()}`;
+    // Add Connect
+    // If Mainnet AND no custom connect, force megammr
+    if (isMainnet) {
+        if (globalConnectInput && !globalConnectInput.value.trim()) {
+            // If empty, auto-fill for mainnet
+            cmd += ' -connect megammr.minima.global:9001';
+        } else if (globalConnectInput && globalConnectInput.value.trim()) {
+            cmd += ` -connect ${globalConnectInput.value.trim()}`;
+        } else {
+            // Fallback
+            cmd += ' -connect megammr.minima.global:9001';
+        }
+    } else {
+        // Testnet behavior
+        if (globalConnectInput && globalConnectInput.value.trim()) {
+            cmd += ` -connect ${globalConnectInput.value.trim()}`;
+        }
     }
 
     // Add Advanced Params
     if (globalParamChecks) {
         globalParamChecks.forEach(chk => {
+            // If Mainnet, SKIP -test flag even if checked
+            if (isMainnet && chk.value.trim() === '-test') return;
+
             if (chk.checked) cmd += ` ${chk.value}`;
         });
     }
@@ -1381,10 +1484,37 @@ function updateGlobalTemplate() {
 }
 
 // Attach Listeners
+// Attach Listeners
+if (globalHostCheck) {
+    globalHostCheck.addEventListener('change', () => {
+        // Host Mode is now independent of Genesis/Testnet
+        updateGlobalTemplate();
+    });
+}
 if (globalCleanCheck) globalCleanCheck.addEventListener('change', updateGlobalTemplate);
 if (globalGenesisCheck) globalGenesisCheck.addEventListener('change', updateGlobalTemplate);
 if (globalConnectInput) globalConnectInput.addEventListener('input', updateGlobalTemplate);
 if (globalParamChecks) globalParamChecks.forEach(chk => chk.addEventListener('change', updateGlobalTemplate));
+if (globalNetworkRadios) {
+    globalNetworkRadios.forEach(r => {
+        r.addEventListener('change', () => {
+            const isMainnet = r.checked && r.value === 'mainnet';
+            if (isMainnet && globalHostCheck) {
+                // Force Host Mode ON and Lock it
+                globalHostCheck.checked = true;
+                globalHostCheck.disabled = true;
+                globalHostCheck.parentElement.style.opacity = '0.5';
+                globalHostCheck.parentElement.title = "Forced ON for Mainnet (Public Access Required)";
+            } else if (globalHostCheck) {
+                // Unlock Host Mode for Testnet
+                globalHostCheck.disabled = false;
+                globalHostCheck.parentElement.style.opacity = '1';
+                globalHostCheck.parentElement.title = "Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.";
+            }
+            updateGlobalTemplate();
+        });
+    });
+}
 
 // Initialize Global Template if elements exist
 if (globalCleanCheck) updateGlobalTemplate();
@@ -1402,6 +1532,23 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
         for (let i = 1; i <= visibleNodes; i++) {
             const card = document.getElementById(`node-${i}`);
             if (card) {
+                // Sync Host Checkbox & Trigger UI Update
+                if (globalHostCheck) {
+                    const hostCheck = card.querySelector('.host-check');
+                    if (hostCheck && hostCheck.checked !== globalHostCheck.checked) {
+                        hostCheck.checked = globalHostCheck.checked;
+
+                        // Auto-uncheck Genesis for Node 1 if Host is checked
+                        if (i === 1 && globalHostCheck.checked) {
+                            const genesisCheck = card.querySelector('.genesis-check');
+                            if (genesisCheck) genesisCheck.checked = false;
+                        }
+
+                        // Dispatch change to update IP/Port UI display
+                        hostCheck.dispatchEvent(new Event('change'));
+                    }
+                }
+
                 const previewInput = card.querySelector('.start-cmd-preview');
                 if (previewInput) {
                     // Replace $ID with actual ID
