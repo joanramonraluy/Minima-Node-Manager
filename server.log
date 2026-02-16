@@ -1,2 +1,0 @@
-sudo: cal una terminal per llegir la contrasenya; o bé useu l'opció -S per llegir de l'entrada estàndard o configureu un assistent askpass
-sudo: es requereix una contrasenya
