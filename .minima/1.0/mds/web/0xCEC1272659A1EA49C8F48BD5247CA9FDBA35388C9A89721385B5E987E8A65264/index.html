@@ -1,0 +1,251 @@
+<html>
+  <head>
+    <title>The Safe</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
+
+    <!-- Load the main MDS JS lib -->
+    <script type="text/javascript" src="mds.js"></script>
+
+    <!-- Load the CSS Style sheet -->
+    <link rel="stylesheet" href="output.css" />
+
+    <!-- And the ICON for the page -->
+    <link rel="icon" type="image/x-icon" href="vaulttrans.ico" />
+
+    <!-- Load the local JS lib -->
+    <script type="text/javascript" src="jslib.js"></script>
+    <script type="text/javascript" src="purify.min.js"></script>
+  </head>
+
+  <body class="overflow-y-scroll">
+    <div class="grid grid-rows-[56px_1fr]">
+      <div
+        class="bg-teal-900 grid grid-cols-[1fr_minmax(0,_560px)_1fr]"
+        onclick="showTitleOnAndroid();"
+      >
+        <div></div>
+        <div class="grid grid-cols-2 px-2">
+          <div class="grid grid-cols-[auto_1fr]">
+            <img src="vault.png" class="h-[24px] w-[24px] my-auto" />
+            <h1 class="text-white text-lg font-semibold my-auto ml-1 text-cente">
+              The Safe
+            </h1>
+          </div>
+          <div class="w-full max-w-lg flex justify-end">
+            <div
+              class="cursor-pointer my-auto mr-2"
+              onclick="event.stopPropagation(); jumpFAQ();"
+            >
+              <span class="text-white tracking-wider font-bold hover:text-opacity-80">FAQ</span>
+            </div>
+
+            <svg
+              onclick="event.stopPropagation(); jumpHome();"
+              class="my-auto"
+              xmlns="http://www.w3.org/2000/svg"
+              height="24"
+              viewBox="0 -960 960 960"
+              width="24"
+            >
+              <path
+                fill="#FFFFFF"
+                d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"
+              />
+            </svg>
+          </div>
+        </div>
+        <div></div>
+      </div>
+
+      <div
+        id="content"
+        class="w-full max-w-xl mx-auto p-4 bg-teal-100 bg-opacity-30"
+      >
+        <div class="grid grid-cols-2">
+          <div></div>
+
+          <div class="pb-3">
+            <button
+              class="ml-auto bg-white hover:bg-teal-900 hover:text-white text-teal-900 p-2 rounded flex gap-1 items-center font-bold text-xs"
+              onclick="jumpToCreate();"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                stroke-width="2.5"
+                stroke="currentColor"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M12 5l0 14" />
+                <path d="M5 12l14 0" />
+              </svg>
+              New Safe
+            </button>
+          </div>
+        </div>
+        <table
+          id="vaults"
+          class="maintable w-full p-1 text-center rounded-lg"
+        ></table>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      function showTitleOnAndroid() {
+        if (window.navigator.userAgent.includes("Minima Browser")) {
+          Android.showTitleBar();
+        }
+      }
+
+      function jumpFAQ() {
+        location.href = "faq.html?uid=" + MDS.minidappuid;
+      }
+
+      function jumpHome() {
+        location.href = "index.html?uid=" + MDS.minidappuid;
+      }
+
+      function jumpToCreate() {
+        location.href = "createvault.html?uid=" + MDS.minidappuid;
+      }
+
+      function jumpToUnlock(coinid) {
+        location.href =
+          "unlockvault.html?uid=" + MDS.minidappuid + "&vaultid=" + coinid;
+      }
+
+      function checkOriginalKeys(pubkey, keys) {
+        var len = keys.length;
+        for (var i = 0; i < len; i++) {
+          var origkey = keys[i].publickey;
+          if (origkey == pubkey) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function loadVaultCoins() {
+        MDS.cmd(
+          "keys;coins address:" +
+            VAULT_ADDRESS +
+            " relevant:true simplestate:true",
+          function (resp) {
+            //MDS.log(JSON.stringify(resp));
+
+            //All your public keys
+            var keys = resp[0].response.keys;
+
+            //get the table
+            var thetable = document.getElementById("vaults");
+
+            //Blank it..
+            thetable.innerHTML = "";
+
+            // Create an empty <thead> element and add it to the table:
+            var header = thetable.createTHead();
+            var headerrow = header.insertRow(0);
+            headerrow.insertCell(0).innerHTML = "<span>Amount</span>";
+            headerrow.insertCell(1).innerHTML = "<span>Token</span>";
+            headerrow.insertCell(2).innerHTML = "<span>Message</span>";
+            headerrow.insertCell(3).innerHTML = "<span>Collect</span>";
+
+            var length = resp[1].response.length;
+
+            if (length == 0) {
+              var tablerow = thetable.insertRow(1);
+              tablerow.setAttribute("align", "center");
+              var cell1 = tablerow.insertCell(0);
+              cell1.setAttribute("class", "text-center text-sm");
+
+              cell1.colSpan = 4;
+              cell1.innerHTML = "No Safe found";
+              return;
+            }
+
+            var tabcounter = 1;
+            for (var i = 0; i < length; i++) {
+              var coin = resp[1].response[i];
+
+              var tablerow = thetable.insertRow(tabcounter++);
+              var cell1 = tablerow.insertCell(0);
+              var cell2 = tablerow.insertCell(1);
+
+              //Message cell takes as much as it needs..
+              var cell3 = tablerow.insertCell(2);
+              cell3.style.width = "100%";
+
+              var cell4 = tablerow.insertCell(3);
+
+              var len = coin.state[2].length;
+              var msg = DOMPurify.sanitize(
+                decodeURIComponent(coin.state[2].substring(1, len - 1).trim())
+              );
+              if (msg == "") {
+                msg = "No message..";
+              }
+
+              if (coin.tokenid == "0x00") {
+                cell1.innerHTML = coin.amount;
+                cell2.innerHTML = "Minima";
+              } else {
+                cell1.innerHTML = coin.tokenamount;
+                cell2.innerHTML = DOMPurify.sanitize(coin.token.name.name);
+              }
+
+              cell3.innerHTML = msg;
+              cell4.innerHTML =
+                "<button class='bg-teal-700 hover:bg-teal-800 focus:drop-shadow focus:shadow-teal-500/50 focus:shadow-lg focus:outline-teal-600 focus:outline-4 text-white p-2 rounded' onclick='jumpToUnlock(\"" +
+                coin.coinid +
+                "\");'>Unlock</button>";
+
+              //Is this a local KEY..
+              var pubkey = coin.state[0];
+              if (checkOriginalKeys(pubkey, keys)) {
+                tablerow = thetable.insertRow(tabcounter++);
+                var cell1 = tablerow.insertCell(0);
+                cell1.colSpan = 4;
+                cell1.innerHTML =
+                  "<span style='color:red;'>LOCAL KEY FOUND (have you seed resynced..?) - unlock this immediately and recreate safe</span>";
+              }
+            }
+          }
+        );
+      }
+
+      //Main message handler..
+      MDS.init(function (msg) {
+        //Do initialisation
+        if (msg.event == "inited") {
+          //Init the vault script
+          MDS.cmd(
+            'newscript trackall:false script:"' + VAULT_SCRIPT + '"',
+            function (resp) {
+              //And now load the vault..
+              loadVaultCoins();
+            }
+          );
+        } else if (msg.event == "NEWBALANCE") {
+          loadVaultCoins();
+        }
+      });
+    </script>
+    <script>
+      document.getElementById("content").style.height = window.innerHeight - 56;
+      window.addEventListener("resize", function () {
+        document.getElementById("content").style.height =
+          window.innerHeight - 56;
+      });
+      document.addEventListener("scroll", () => {
+        document.getElementById("content").style.height = "100%";
+      });
+    </script>
+  </body>
+</html>

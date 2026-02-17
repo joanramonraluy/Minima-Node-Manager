@@ -1,0 +1,747 @@
+<html>
+  <head>
+    <title>The Safe</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
+
+    <!-- Load the main MDS JS lib -->
+    <script type="text/javascript" src="mds.js"></script>
+
+    <!-- Load the CSS Style sheet -->
+    <link rel="stylesheet" href="output.css" />
+
+    <!-- And the ICON for the page -->
+    <link rel="icon" type="image/x-icon" href="vaulttrans.ico" />
+
+    <!-- Load the local JS lib -->
+    <script type="text/javascript" src="jslib.js"></script>
+    <script type="text/javascript" src="decimal.min.js"></script>
+  </head>
+
+  <body class="overflow-y-scroll">
+    <div
+      id="dialog"
+      class="hidden animate-fadeIn fixed left-0 right-0 bottom-0 top-0 flex items-center justify-center bg-black bg-opacity-80"
+    >
+      <div
+        class="mx-4 md:mx-0 bg-white w-[368px] min-h-[250px] h-auto grid grid-cols-1 grid-rows-[50px_1fr_auto] rounded"
+      >
+        <div class="px-4 py-2">
+          <h3 id="dialogtitle" class="font-bold border-b pb-2">
+            Transaction Status
+          </h3>
+        </div>
+        <div class="h-max">
+          <p class="px-4 py-0 m-0 text-slate-600" id="message"></p>
+        </div>
+        <div id="normal" class="hidden w-full flex justify-end px-4 py-2">
+          <button
+            id="btn-ok"
+            onclick="hideDialog();"
+            class="h-max bg-black px-6 py-2 font-bold rounded text-white"
+          >
+            Ok
+          </button>
+        </div>
+        <div id="home" class="hidden w-full flex justify-end px-4 py-2">
+          <button
+            id="btn-ok"
+            onclick="jumpHome();"
+            class="h-max bg-black px-6 py-2 font-bold rounded text-white"
+          >
+            Ok
+          </button>
+        </div>
+        <div
+          id="confirm"
+          class="hidden w-full flex justify-end px-4 py-2 gap-2 items-center"
+        >
+          <button
+            onclick="hideDialogWithCallback(false);"
+            class="h-max bg-white border px-6 py-2 font-bold rounded text-black"
+          >
+            Cancel
+          </button>
+          <button
+            id=""
+            onclick="confirmDialogWithCallback(true);"
+            class="h-max bg-black px-6 py-2 border font-bold rounded text-white"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-rows-[56px_1fr] overflow-scroll">
+      <div
+        class="bg-teal-900 grid grid-cols-[1fr_minmax(0,_560px)_1fr]"
+        onclick="showTitleOnAndroid();"
+      >
+        <div></div>
+        <div class="grid grid-cols-2 px-2">
+          <div class="grid grid-cols-[auto_1fr]">
+            <img src="vault.png" class="h-[24px] w-[24px] my-auto" />
+            <h1
+              class="text-white text-lg font-semibold my-auto ml-1 text-cente"
+            >
+              The Safe
+            </h1>
+          </div>
+          <div class="w-full max-w-lg flex justify-end">
+            <div
+              class="cursor-pointer my-auto mr-2"
+              onclick="event.stopPropagation(); jumpFAQ();"
+            >
+              <span
+                class="text-white tracking-wider font-bold hover:text-opacity-80"
+                >FAQ</span
+              >
+            </div>
+
+            <svg
+              onclick="event.stopPropagation(); jumpHome();"
+              class="my-auto"
+              xmlns="http://www.w3.org/2000/svg"
+              height="24"
+              viewBox="0 -960 960 960"
+              width="24"
+            >
+              <path
+                fill="#FFFFFF"
+                d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"
+              />
+            </svg>
+          </div>
+        </div>
+        <div></div>
+      </div>
+      <div class="md:mx-0 w-full">
+        <div
+          id="content"
+          class="w-full max-w-xl mx-auto p-4 bg-teal-100 bg-opacity-30"
+        >
+          <form id="safe_form">
+            <div class="mb-3">
+              <label
+                htmlfor="vaultToken"
+                class="font-bold tracking-wide text-teal-900"
+                >Token</label
+              >
+              <select
+                id="vaultToken"
+                name="vaultToken"
+                class="w-full rounded px-2 py-3 font-bold focus:outline-teal-900"
+              ></select>
+              <span
+                id="vaultTokenError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+            <div>
+              <label
+                htmlfor="lockAmount"
+                class="font-bold tracking-wide text-teal-900"
+                >Amount</label
+              >
+              <input
+                required
+                id="lockAmount"
+                placeholder="Amount"
+                name="lockAmount"
+                type="text"
+                class="w-full rounded-lg px-2 py-3 focus:outline focus:outline-teal-900"
+              />
+              <span
+                id="lockAmountError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+            <div class="mt-3">
+              <label
+                htmlfor="lockPhrase"
+                class="font-bold tracking-wide text-teal-900"
+                >Seed Phrase</label
+              >
+              <textarea
+                required
+                rows="5"
+                id="lockPhrase"
+                placeholder="Enter seed phrase"
+                name="lockPhrase"
+                rows="2"
+                class="w-full rounded-lg px-2 py-3 focus:outline focus:outline-teal-900"
+              ></textarea>
+              <span
+                id="lockPhraseError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+            <div class="grid grid-cols-2 my-3">
+              <div></div>
+              <div class="flex justify-end">
+                <button onclick="generateSeed()" type="button" class="bg-[#fb923c] text-xs p-2 rounded font-bold text-white">Generate</button>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label
+                htmlfor="confirm_lock_phrase"
+                class="font-bold tracking-wide text-teal-900"
+                >Confirm Phrase</label
+              >
+              <textarea
+                required
+                rows="5"
+                id="confirmLockPhrase"
+                placeholder="Confirm seed phrase"
+                name="confirmLockPhrase"
+                rows="2"
+                class="w-full rounded-lg px-2 py-3 focus:outline focus:outline-teal-900"
+              ></textarea>
+              <span
+                id="confirmLockPhraseError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+            <div class="mt-3">
+              <label
+                htmlfor="public_message"
+                class="font-bold tracking-wide text-teal-900"
+                >Public Message
+                <span class="text-xs text-black">*Optional</span></label
+              >
+              <textarea
+                id="publicMessage"
+                placeholder="Public message"
+                name="publicMessage"
+                rows="2"
+                class="w-full rounded-lg px-2 py-3 focus:outline focus:outline-teal-900"
+              ></textarea>
+              <span
+                id="publicMessageError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+            <div
+              id="seedPhraseCheckboxWrapper"
+              class="mt-3 bg-teal-100 p-4 py-2 rounded-lg py-4"
+            >
+              <div class="grid grid-cols-[auto_1fr] gap-2">
+                <input
+                  type="checkbox"
+                  id="seedPhraseCheckbox"
+                  name="seedPhraseCheckbox"
+                  class="form-checkbox h-5 w-5 text-teal-600 my-auto accent-teal-900"
+                />
+                <label
+                  for="seedPhraseCheckbox"
+                  class="ml-2 text-teal-900 text-sm"
+                  >I have written down the seed phrase and understand that if
+                  lost, I will not be able to recover my coins</label
+                >
+              </div>
+              <span
+                id="seedPhraseCheckboxError"
+                class="hidden inline-block w-full bg-red-500 text-white px-3 py-2 my-2"
+              ></span>
+            </div>
+
+            <div class="grid grid-cols-2">
+              <div></div>
+              <div class="ml-auto my-4">
+                <button
+                  id="safe_btn"
+                  class="bg-teal-900 rounded text-white disabled:bg-opacity-10 hover:bg-opacity-80 font-bold px-3 py-2"
+                >
+                  Create Safe
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <br />
+          <div class="tracking-wider">
+            <h3 class="text-teal-900 font-bold">Recommended:</h3>
+            <p>Using <b>the same lock phrase</b> for all your safes.</p>
+            <p>
+              <b>DO NOT</b> use your main Minima pass phrase - use a different
+              one
+            </p>
+            <p>
+              If you don't have a Safe Lock Phrase yet.. you can use this one.
+            </p>
+            <p>Write it down somewhere safe.</p>
+            <p>You will need it to unlock your coins.</p>
+          </div>
+          <br />
+          <!-- <div>
+            <label
+              htmlfor="public_message"
+              class="font-bold tracking-wide text-teal-900"
+              >Suggested Seed Phrase</label
+            >
+            <textarea
+              readonly
+              id="gen_lock_phrase"
+              placeholder="Generated phrase"
+              name="genLockPhrase"
+              rows="5"
+              class="w-full rounded-lg px-2 py-3 focus:outline focus:outline-teal-900"
+            ></textarea>
+          </div> -->
+          <br />
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      function hideDialog() {
+        // hide buttons
+        document.getElementById("normal").style.display = "none";
+        document.getElementById("confirm").style.display = "none";
+
+        // hide dialogs
+        document.getElementById("dialog").style.display = "none";
+        // clear text
+        document.getElementById("message").innerText = "";
+      }
+
+      let confirmCallback;
+      function hideDialogWithCallback(result) {
+        // hide buttons
+        document.getElementById("normal").style.display = "none";
+        document.getElementById("confirm").style.display = "none";
+
+        // hide dialogs
+        document.getElementById("dialog").style.display = "none";
+        // clear text
+        document.getElementById("message").innerText = "";
+
+        confirmCallback(result);
+      }
+      function confirmDialogWithCallback(result) {
+        hideDialogWithCallback(result);
+      }
+      function showDialog(message, confirm, callback, info) {
+        // display dialog
+        document.getElementById("dialog").style.display = "flex";
+        // set message
+        document.getElementById("message").innerText = message;
+
+        if (info) {
+          document.getElementById("home").style.display = "flex";
+        }
+
+        if (!info) {
+          // if a confirm type show buttons for confirm type
+          if (confirm) {
+            confirmCallback = callback;
+            document.getElementById("dialogtitle").innerText =
+              "Confirm Transaction";
+            document.getElementById("confirm").style.display = "flex";
+          }
+          // otherwise show normal
+          if (!confirm) {
+            document.getElementById("dialogtitle").innerText =
+              "Transaction Status";
+            document.getElementById("normal").style.display = "flex";
+          }
+        }
+      }
+      function showTitleOnAndroid() {
+        if (window.navigator.userAgent.includes("Minima Browser")) {
+          Android.showTitleBar();
+        }
+      }
+      function jumpFAQ() {
+        location.href = "faq.html?uid=" + MDS.minidappuid;
+      }
+
+      function jumpHome() {
+        location.href = "index.html?uid=" + MDS.minidappuid;
+      }
+
+      async function createVault(callback) {
+        try {
+          //Check amount exists..
+          if (document.getElementById("lockAmount").value.trim() == "") {
+            showDialog("Cannot have a blank amount.");
+            return;
+          }
+
+          //What is the amount..
+          var amount;
+          try {
+            amount = new Decimal(
+              document.getElementById("lockAmount").value.trim()
+            );
+          } catch (e) {
+            showDialog("Invalid amount - MUST be a number");
+            return;
+          }
+
+          //Get the Phrase..
+          var phrase = document
+            .getElementById("lockPhrase")
+            .value.trim()
+            .toUpperCase();
+          if (phrase == "") {
+            showDialog("Cannot have a blank phrase!");
+            return;
+          }
+
+          //Get the token
+          var selector = document.getElementById("vaultToken");
+          var tokenname = selector.options[selector.selectedIndex].text;
+          var tokenid = selector.options[selector.selectedIndex].value;
+          //This will send 0.1 Minima to the Vault. You must ensure you have a copy of the seed phrase, it will not be shown again and is not recoverable if lost.
+          showDialog(
+            `This will send ${amount} ${tokenname} to the Safe.  You must ensure you have a copy of the seed phrase, it will not be shown again and is not recoverable if lost.`,
+            true,
+            function (result) {
+              if (result) {
+                safe_btn.disabled = true;
+
+                const cleanPhrase = phrase.toUpperCase();
+
+                //Convert phrase into a key
+                var func =
+                  'keys action:genkey phrase:"' + cleanPhrase + '";keys';
+                //First lets convert the phrase into a KEY
+                MDS.cmd(func, function (resp) {
+
+                  //NEW phrase key..
+                  var phrasekey = resp[0].response.publickey;
+
+                  //Get you normal key.. so we can find this coin on a resync
+                  var key = resp[1].response.keys[0].publickey;
+
+                  var statevars = {};
+
+                  //The NEW public key based on the phrase
+                  statevars[0] = phrasekey;
+
+                  //Your NORMAL public key = so a chain resync finds your coins
+                  statevars[1] = key;
+
+                  //The message..
+                  statevars[2] =
+                    "[" +
+                    encodeURIComponent(
+                      document.getElementById("publicMessage").value
+                    ) +
+                    "]";
+
+                  //Now lets send the coins to the vault address
+                  var func =
+                    "send tokenid:" +
+                    tokenid +
+                    " amount:" +
+                    amount +
+                    " address:" +
+                    VAULT_ADDRESS +
+                    " state:" +
+                    JSON.stringify(statevars);
+
+                  MDS.cmd(func, function (resp) {
+                    //Is it pending..
+                    if (resp.pending) {
+                      showDialog(
+                        "This transaction is now pending.  You can accept it in the Pending MiniDapp.",
+                        false,
+                        null,
+                        true
+                      );
+                    } else if (!resp.status) {
+                      safe_btn.disabled = false;
+
+                      const error = resp.message
+                        ? resp.message
+                        : resp.error
+                        ? resp.error
+                        : "Something went wrong.";
+
+                      showDialog("Transaction Failed..\n\n" + error);
+                    } else {
+                      showDialog(
+                        "Safe created..!\n\nPlease wait for the transaction to confirm.",
+                        false,
+                        null,
+                        true
+                      );
+                    }
+                  });
+                });
+              }
+            }
+          );
+        } catch (err) {
+          showDialog(err);
+        }
+      }
+
+      //Main message handler..
+      MDS.init(function (msg) {
+        //Do initialisation
+        if (msg.event == "inited") {
+          //Do stuff.. from now..
+          MDS.cmd("balance", function (resp) {
+            //Set the phrase
+            // var phrase = resp[0].response.phrase;
+            // document.getElementById("gen_lock_phrase").value = phrase;
+
+            //Set the tokenid..
+            var balance = resp;
+            var len = balance.response.length;
+            var selector = document.getElementById("vaultToken");
+
+            for (var i = 0; i < len; i++) {
+              //Get the token
+              var token = balance.response[i];
+
+              //Create the Option
+              var option = document.createElement("option");
+              option.value = token.tokenid;
+
+              if (token.tokenid == "0x00") {
+                //It's Minima
+                //option.text  = "Minima ( "+token.confirmed+" )";
+                option.text = "Minima";
+                selector.appendChild(option);
+              } else {
+                //option.text  = token.token.name+" ( "+token.confirmed+" )";
+                option.text = token.token.name;
+                selector.appendChild(option);
+              }
+            }
+          });
+        }
+      });
+    </script>
+    <script type="text/javascript" src="bip39.js"></script>
+    <script type="text/javascript">
+      function disableButton() {
+        document.getElementById("safe_btn").disabled = true;
+      }
+
+      function enableButton() {
+        document.getElementById("safe_btn").disabled = false;
+      }
+
+      function generateSeed() {
+        document.getElementById("lockPhrase").value = "Generating key...";
+        updateFormState("lockPhrase", "");
+        updateFormState("confirmLockPhrase", "");
+        checkFormValidity();
+
+
+        MDS.cmd("keys action:genkey", function (resp) {
+            //Set the phrase
+            var phrase = resp.response.phrase;
+            document.getElementById("lockPhrase").value = phrase;
+            document.getElementById("confirmLockPhrase").value = "";
+            updateFormState("lockPhrase", phrase);
+            updateFormState("confirmLockPhrase", "");
+            checkFormValidity();
+        });
+
+      }
+
+      // initial state for form
+      let formState = {
+        amount: 0,
+        tokenid: "0x00",
+        lockPhrase: "",
+        confirmLockPhrase: "",
+        publicMessage: "",
+        seedPhraseCheckbox: false,
+      };
+
+      function updateFormState(field, value) {
+        formState[field] = value;
+      }
+
+      async function handleSubmit(event) {
+        event.preventDefault();
+        await createVault((res) => {
+        });
+      }
+
+      function handleInputChange(event) {
+        const { name, value, type, checked, id } = event.target;
+        const fieldValue = type === "checkbox" ? checked : value;
+        updateFormState(name, fieldValue);
+
+        const errorMessage = validateField(name, fieldValue);
+        if (errorMessage) {
+          disableButton();
+          if (type === "checkbox") {
+            document.getElementById(`${id}Wrapper`).classList.add("!outline");
+            document
+              .getElementById(`${id}Wrapper`)
+              .classList.add("animate-pulse");
+            document
+              .getElementById(`${id}Wrapper`)
+              .classList.add("!outline-red-500");
+            return;
+          }
+          displayError(name, errorMessage);
+        } else {
+          if (type === "checkbox") {
+            document
+              .getElementById(`${id}Wrapper`)
+              .classList.remove("!outline");
+            document
+              .getElementById(`${id}Wrapper`)
+              .classList.remove("animate-pulse");
+            document
+              .getElementById(`${id}Wrapper`)
+              .classList.remove("!outline-red-500");
+          }
+          clearError(name);
+        }
+
+        checkFormValidity();
+      }
+
+      const validationRules = {
+        lockAmount: (value) => {
+          if (value <= 0) {
+            return "This field is required";
+          }
+
+          if (isNaN(value)) {
+            return "Invalid number";
+          }
+
+          return "";
+        },
+        lockPhrase: (value) => {
+          if (value.trim() === "") {
+            return "This field is required";
+          }
+
+          if (value === formState.confirmLockPhrase) {
+            clearError("confirmLockPhrase");
+          }
+
+          if (value !== formState.confirmLockPhrase) {
+            displayError("confirmLockPhrase", "Seed phrases do not match");
+          }
+
+          const words = value.trim().split(/\s+/);
+          for (let word of words) {
+            if (!BIP39WORDS.includes(word.toUpperCase())) {
+              return "Invalid word";
+            }
+          }
+
+          const isTwentyFourWords = words.length === 24;
+          if (!isTwentyFourWords) {
+            return "24 words are required";
+          }
+
+          return "";
+        },
+        confirmLockPhrase: (value, confirmValue) => {
+          if (value.trim() === "") {
+            return "This field is required";
+          }
+
+          if (value !== formState.lockPhrase) {
+            return "Seed phrases do not match";
+          }
+
+          return "";
+        },
+        publicMessage: (value) => {
+          return "";
+        },
+        seedPhraseCheckbox: (value) => {
+          if (!value) {
+            return "This field is required";
+          }
+
+          return "";
+        },
+      };
+
+      function validateField(fieldName, value) {
+        const errorMessage = validationRules[fieldName](value);
+        return errorMessage;
+      }
+
+      function checkFormValidity() {
+        const validationResults = Object.keys(validationRules).map(
+          (fieldName) => {
+            const value = formState[fieldName];
+            const errorMessage = validateField(fieldName, value);
+            return !errorMessage;
+          }
+        );
+
+        const formIsValid = validationResults.every((result) => result);
+
+        if (formIsValid) {
+          enableButton();
+        } else {
+          disableButton();
+        }
+      }
+
+      function displayError(fieldName, errorMessage) {
+        document.getElementById(`${fieldName}Error`).textContent = errorMessage;
+        document.getElementById(`${fieldName}Error`).classList.remove("hidden");
+        document.getElementById(`${fieldName}`).classList.add("!outline-2");
+        document
+          .getElementById(`${fieldName}`)
+          .classList.add("!outline-red-500");
+      }
+
+      function clearError(fieldName) {
+        document.getElementById(`${fieldName}Error`).textContent = "";
+        document.getElementById(`${fieldName}Error`).classList.add("hidden");
+        document.getElementById(`${fieldName}`).classList.remove("!outline-2");
+        document
+          .getElementById(`${fieldName}`)
+          .classList.remove("!outline-red-500");
+      }
+
+      document
+        .getElementById("safe_form")
+        .addEventListener("submit", handleSubmit);
+
+      document
+        .getElementById("safe_form")
+        .addEventListener("input", handleInputChange);
+
+        document
+        .getElementById("lockPhrase").addEventListener("input", function (event) {
+        // Get the current value of the textarea
+        let currentValue = event.target.value;
+
+        // Convert the value to uppercase
+        let uppercaseValue = currentValue.toUpperCase();
+
+        // Set the uppercase value back to the textarea
+        event.target.value = uppercaseValue;
+      });
+       
+      document
+        .getElementById("confirmLockPhrase").addEventListener("input", function (event) {
+        // Get the current value of the textarea
+        let currentValue = event.target.value;
+
+        // Convert the value to uppercase
+        let uppercaseValue = currentValue.toUpperCase();
+
+        // Set the uppercase value back to the textarea
+        event.target.value = uppercaseValue;
+      });
+
+      // once on load
+      checkFormValidity();
+    </script>
+  </body>
+</html>

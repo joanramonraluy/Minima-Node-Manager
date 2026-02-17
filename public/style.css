@@ -606,6 +606,26 @@ header {
     border-color: #555;
 }
 
+/* Red / Danger aliases */
+.btn-red {
+    background-color: var(--accent-red);
+    color: #fff;
+}
+
+.btn-red:hover {
+    background-color: #ff0000;
+}
+
+/* Purple (ADB/Vite) */
+.btn-purple {
+    background-color: #7209b7;
+    color: #fff;
+}
+
+.btn-purple:hover {
+    background-color: #b5179e;
+}
+
 /* Neutral/Toggle (Browse, View Ops) -*/
 .btn-copy {
     background-color: #333;

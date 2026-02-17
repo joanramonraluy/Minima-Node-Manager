@@ -62,7 +62,9 @@
                     <button id="clear-all-logs-btn" class="btn btn-neutral">Clear All Logs</button>
 
                     <button id="toggle-view-btn" class="btn btn-secondary">Toggle View</button>
-                    <button id="kill-all-btn" class="btn btn-danger">Kill All (Force)</button>
+                    <button id="kill-all-btn" class="btn btn-danger">Kill All Processes</button>
+                    <button id="delete-all-data-btn" class="btn btn-danger"
+                        title="DANGER: Delete ALL node data (irreversible)">⚠ DELETE ALL DATA ⚠</button>
                     <button id="global-config-btn" class="btn btn-neutral" style="margin-left: auto;"
                         title="Global Start Configuration">⚙️</button>
                 </div>
@@ -448,7 +450,9 @@
 
                 <div class="action-buttons">
                     <button class="btn btn-net disconnect-btn" disabled>Disconnect Net</button>
-                    <!-- Export .env moved to Vite Tab -->
+                    <button class="btn btn-net reconnect-btn" disabled style="display: none;">Reconnect Net</button>
+                    <button class="btn btn-danger delete-data-btn"
+                        title="Delete all data for this node (irreversible)">Delete Data</button>
                 </div>
             </div>
 
@@ -507,6 +511,20 @@
                     <small style="color: #888; display: block; margin-top: 5px; margin-left: 24px;">
                         Automatically executes `maxima action:setname name:user$ID` when node is ready.
                     </small>
+                </div>
+
+                <!-- Peer Discovery Automation -->
+                <div
+                    style="margin-bottom: 15px; padding: 15px; background: #222; border-radius: 4px; border: 1px solid #444;">
+                    <h4 style="margin: 0 0 10px 0; color: var(--accent-primary);">Peer Discovery Automation</h4>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <button id="sync-peers-btn" class="btn btn-blue" style="flex: 1;">Sync Peers from URL
+                            Now</button>
+                        <label class="checkbox-container" style="flex: 1;">
+                            <input type="checkbox" id="auto-sync-peers-check" checked> Auto-sync on Start
+                        </label>
+                    </div>
+                    <small style="color: #888;">FET FROM: <code>https://spartacusrex.com/minimapeers.txt</code></small>
                 </div>
 
                 <!-- Global Mainnet / Testnet Switch -->

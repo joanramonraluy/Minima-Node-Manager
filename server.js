@@ -243,6 +243,69 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Handle Delete Node Data
+    socket.on('delete-node-data', (data) => {
+        const { id } = data;
+        io.emit('log-update', { id, type: 'system', content: `[System] Stopping node and deleting data for Node ${id}...\n` });
+        // First ensure node is stopped
+        stopNode(id);
+
+        setTimeout(() => {
+            const proc = spawn('./scripts/delete_node_data.sh', [id]);
+            proc.stdout.on('data', d => io.emit('log-update', { id, type: 'system', content: d.toString() }));
+            proc.on('close', () => {
+                io.emit('log-update', { id, type: 'system', content: `[System] Node ${id} data deletion complete.\n` });
+            });
+        }, 1000); // Wait 1s for stop command to process
+    });
+
+    // Handle Delete All Data
+    socket.on('delete-all-data', () => {
+        io.emit('global-log', '[System] TERMINATING ALL NODES AND WIPING ALL DATA...\n');
+        stopAll();
+        setTimeout(() => {
+            const proc = spawn('./scripts/delete_node_data.sh', ['all']);
+            proc.stdout.on('data', d => io.emit('global-log', d.toString()));
+            proc.on('close', () => {
+                io.emit('global-log', '[System] GLOBAL DATA WIPE COMPLETE.\n');
+            });
+        }, 2000); // Wait 2s for all nodes to stop
+    });
+
+    // Handle Sync Peers from URL
+    socket.on('sync-peers', () => {
+        io.emit('global-log', '[System] Fetching peers from spartacusrex.com...\n');
+
+        https.get('https://spartacusrex.com/minimapeers.txt', (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                const peers = data.trim().split(',').map(p => p.trim()).filter(p => p);
+                if (peers.length === 0) {
+                    io.emit('global-log', '[Error] No peers found in list.\n');
+                    return;
+                }
+
+                io.emit('global-log', `[System] Found ${peers.length} peers. Synchronizing to all nodes...\n`);
+
+                // Distribute to all running nodes
+                Object.keys(nodeProcesses).forEach(id => {
+                    peers.forEach(peer => {
+                        const cmd = `connect host:${peer}`;
+                        if (nodeProcesses[id]) {
+                            nodeProcesses[id].stdin.write(cmd + '\n');
+                        }
+                    });
+                    io.emit('log-update', { id, type: 'system', content: `[System] Connection attempts started for ${peers.length} peers from discovery URL.\n` });
+                });
+
+                io.emit('global-log', '[System] Peer synchronization complete.\n');
+            });
+        }).on('error', (err) => {
+            io.emit('global-log', `[Error] Peer sync failed: ${err.message}\n`);
+        });
+    });
+
     // Handle Network Reconnect
     socket.on('reconnect-node', (data) => {
         const { id } = data;

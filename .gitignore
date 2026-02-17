@@ -4,7 +4,7 @@ Minima-master
 minimaapk-main
 
 #nodes
-nodes/*
+nodes/
 
 #DB and ogs
 *.db

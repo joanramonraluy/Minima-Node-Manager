@@ -208,8 +208,19 @@ function addNode() {
     const commandInput = card.querySelector('.command-bar .command-input');
     const disconnectBtn = card.querySelector('.disconnect-btn');
     const mainnetPresetBtn = card.querySelector('.mainnet-preset-btn');
+    const deleteDataBtn = card.querySelector('.delete-data-btn');
 
     // ... existing button listeners ...
+
+    if (deleteDataBtn) {
+        deleteDataBtn.onclick = () => {
+            deleteDataBtn.disabled = true;
+            deleteDataBtn.textContent = 'Deleting...';
+            socket.emit('delete-node-data', { id: i });
+            // Re-enable after a delay or let status update handle it? 
+            // Status update to 'stopped' will re-render card anyway, resetting button.
+        };
+    }
 
     if (mainnetPresetBtn) {
         mainnetPresetBtn.onclick = () => {
@@ -253,11 +264,15 @@ function addNode() {
         if (genesisCheck.checked && genesisContainer.style.display !== 'none') cmd += ' -genesis';
 
         const connectVal = connectInput.value.trim();
-        if ((i > 1) && connectVal) {
+        const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
+        if ((i > 1 || isMainnetMode) && connectVal) {
             cmd += ` -connect ${connectVal}`;
         }
 
         paramChecks.forEach(chk => {
+            // Mainnet: skip -test flag if checked
+            if (isMainnetMode && chk.value.trim() === '-test') return;
+
             if (chk.checked) cmd += ` ${chk.value}`;
         });
 
@@ -343,6 +358,15 @@ function addNode() {
             const autoNameCheck = document.getElementById('auto-name-check');
             const autoName = autoNameCheck ? autoNameCheck.checked : false;
             socket.emit('start-node', { id: i, command: rawCommand, isHost: hostCheck.checked, autoName });
+
+            // Auto-sync peers from URL if enabled
+            const autoSyncCheck = document.getElementById('auto-sync-peers-check');
+            if (autoSyncCheck && autoSyncCheck.checked) {
+                // Delay sync slightly to ensure node has time to open its ports/P2P
+                setTimeout(() => {
+                    socket.emit('sync-peers');
+                }, 5000);
+            }
         }
     };
 
@@ -463,6 +487,20 @@ document.getElementById('kill-all-btn').onclick = () => {
     socket.emit('kill-all');
 };
 
+const deleteAllDataBtn = document.getElementById('delete-all-data-btn');
+if (deleteAllDataBtn) {
+    deleteAllDataBtn.onclick = () => {
+        deleteAllDataBtn.disabled = true;
+        deleteAllDataBtn.textContent = ' WIPING DATA...';
+        socket.emit('delete-all-data');
+        // Re-enable after 3 seconds as feedback
+        setTimeout(() => {
+            deleteAllDataBtn.disabled = false;
+            deleteAllDataBtn.textContent = '⚠ DELETE ALL DATA ⚠';
+        }, 3000);
+    };
+}
+
 const addNodeBtn = document.getElementById('add-node-btn');
 if (addNodeBtn) {
     addNodeBtn.onclick = () => {
@@ -501,8 +539,9 @@ document.getElementById('open-all-btn').onclick = () => {
             const indicator = card.querySelector('.status-indicator');
             // Check for running class
             if (indicator && indicator.classList.contains('running')) {
-                const ip = `10.0.0.${10 + i}`;
-                const mdsPort = 9003;
+                const isHost = card.querySelector('.host-check').checked;
+                const ip = isHost ? '127.0.0.1' : `10.0.0.${10 + i}`;
+                const mdsPort = isHost ? 9003 + (i - 1) * 100 : 9003;
                 window.open(`https://${ip}:${mdsPort}/`, '_blank');
                 opened++;
             }
@@ -1351,6 +1390,13 @@ socket.on('node-status', (data) => {
             disconnectBtn.classList.remove('btn-net-disconnected');
         }
         // if (exportEnvBtn) exportEnvBtn.disabled = true; // REMOVED
+
+        // Always enable Delete Data when stopped
+        const deleteDataBtn = card.querySelector('.delete-data-btn');
+        if (deleteDataBtn) {
+            deleteDataBtn.disabled = false;
+            deleteDataBtn.textContent = 'Delete Data';
+        }
     }
 });
 
@@ -1444,6 +1490,20 @@ function updateGlobalTemplate() {
         if (r.checked && r.value === 'mainnet') isMainnet = true;
     });
 
+    // Auto-switch default values
+    const connectVal = globalConnectInput.value.trim();
+    if (isMainnet && connectVal === '10.0.0.11:9001') {
+        globalConnectInput.value = 'megammr.minima.global:9001';
+        // Recurse once to update cmd string with new value
+        updateGlobalTemplate();
+        return;
+    } else if (!isMainnet && connectVal === 'megammr.minima.global:9001') {
+        globalConnectInput.value = '10.0.0.11:9001';
+        // Recurse once to update cmd string with new value
+        updateGlobalTemplate();
+        return;
+    }
+
     // Add Clean/Genesis
     if (globalCleanCheck && globalCleanCheck.checked) cmd += ' -clean';
     // Genesis only if NOT Mainnet (Mainnet never uses Genesis)
@@ -1519,6 +1579,34 @@ if (globalNetworkRadios) {
 // Initialize Global Template if elements exist
 if (globalCleanCheck) updateGlobalTemplate();
 
+// Peer Discovery Automation Logic
+const syncPeersBtn = document.getElementById('sync-peers-btn');
+const autoSyncPeersCheck = document.getElementById('auto-sync-peers-check');
+
+if (syncPeersBtn) {
+    syncPeersBtn.onclick = () => {
+        syncPeersBtn.disabled = true;
+        syncPeersBtn.textContent = 'Syncing...';
+        socket.emit('sync-peers');
+        setTimeout(() => {
+            syncPeersBtn.disabled = false;
+            syncPeersBtn.textContent = 'Sync Peers from URL Now';
+        }, 3000);
+    };
+}
+
+if (autoSyncPeersCheck) {
+    // Load saved state
+    const savedAutoSync = localStorage.getItem('auto-sync-peers');
+    if (savedAutoSync !== null) {
+        autoSyncPeersCheck.checked = (savedAutoSync === 'true');
+    }
+
+    autoSyncPeersCheck.onchange = () => {
+        localStorage.setItem('auto-sync-peers', autoSyncPeersCheck.checked);
+    };
+}
+
 if (applyGlobalCmdBtn && globalCmdTemplateInput) {
     applyGlobalCmdBtn.onclick = () => {
         const template = globalCmdTemplateInput.value;
@@ -1528,11 +1616,26 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
         }
 
         // Confirm removed as per user request
+        const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
+
         // Iterate all visible nodes
         for (let i = 1; i <= visibleNodes; i++) {
             const card = document.getElementById(`node-${i}`);
             if (card) {
-                // Sync Host Checkbox & Trigger UI Update
+                // Synchronize Inputs
+                const connectInput = card.querySelector('.connect-input');
+                const connectGroup = card.querySelector('.connect-group');
+
+                if (connectInput && globalConnectInput) {
+                    connectInput.value = globalConnectInput.value.trim();
+                }
+
+                // Node 1 Visibility logic
+                if (i === 1 && connectGroup) {
+                    connectGroup.style.display = isMainnetMode ? 'flex' : 'none';
+                }
+
+                // Sync Host Checkbox
                 if (globalHostCheck) {
                     const hostCheck = card.querySelector('.host-check');
                     if (hostCheck && hostCheck.checked !== globalHostCheck.checked) {
@@ -1543,25 +1646,36 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
                             const genesisCheck = card.querySelector('.genesis-check');
                             if (genesisCheck) genesisCheck.checked = false;
                         }
-
-                        // Dispatch change to update IP/Port UI display
-                        hostCheck.dispatchEvent(new Event('change'));
                     }
                 }
+
+                // Sync Advanced Params Flags
+                if (globalParamChecks) {
+                    const localParamChecks = card.querySelectorAll('.param-check');
+                    globalParamChecks.forEach(gChk => {
+                        const localChk = Array.from(localParamChecks).find(l => l.value === gChk.value);
+                        if (localChk) {
+                            localChk.checked = gChk.checked;
+                        }
+                    });
+                }
+
+                // Trigger UI Update & IP/Port refresh
+                const hostCheck = card.querySelector('.host-check');
+                if (hostCheck) hostCheck.dispatchEvent(new Event('change'));
 
                 const previewInput = card.querySelector('.start-cmd-preview');
                 if (previewInput) {
                     // Replace $ID with actual ID
                     let newCmd = template.replace(/\$ID/g, i);
 
-                    // Node 1: Remove -connect if present (Node 1 doesn't connect to anyone typically in this star topology)
+                    // Node 1: Remove -connect if present (Legacy Testnet behavior)
                     // Node > 1: Remove -genesis if present
-                    if (i === 1) {
-                        // Remove -connect and its argument
+                    if (i === 1 && !isMainnetMode) {
+                        // Remove -connect and its argument only if NOT Mainnet
                         newCmd = newCmd.replace(/\s+-connect\s+\S+/g, '');
-                        // Also cleanup simple flag if arg missing (defensive)
                         newCmd = newCmd.replace(/\s+-connect\b/g, '');
-                    } else {
+                    } else if (i > 1) {
                         // Remove -genesis
                         newCmd = newCmd.replace(/\s+-genesis\b/g, '');
                     }

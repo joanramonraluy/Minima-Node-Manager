@@ -1,0 +1,25 @@
+{
+  "files": {
+    "main.css": "./static/css/main.e5ee8716.css",
+    "main.js": "./static/js/main.b289a157.js",
+    "static/js/787.a38f208b.chunk.js": "./static/js/787.a38f208b.chunk.js",
+    "static/media/minima_logo.gif": "./static/media/minima_logo.40998e064596eb70c7af.gif",
+    "static/media/maxsolo_select_message.svg": "./static/media/maxsolo_select_message.b18b76e5608b6b3fe0066d3d5cb40a87.svg",
+    "static/media/maxsolo_desktop_bg_light.png": "./static/media/maxsolo_desktop_bg_light.86624c489becdf6c023f.png",
+    "static/media/maxsolo_desktop_bg.png": "./static/media/maxsolo_desktop_bg.28743082a368b37e8142.png",
+    "static/media/maxsolo_chat_icon.svg": "./static/media/maxsolo_chat_icon.276fcac38d5bb7e872b04a9b24a5a3a7.svg",
+    "static/media/minima_logotype.svg": "./static/media/minima_logotype.ce1bc45178a77ad3a9958e3356a5c731.svg",
+    "static/media/maxsolo_blue_logo.svg": "./static/media/maxsolo_blue_logo.918e174cddd899e0836c899cb03146bb.svg",
+    "static/media/search_icon.svg": "./static/media/search_icon.6ba68f814f385f9e6e33.svg",
+    "static/media/search_icon_active.svg": "./static/media/search_icon_active.42f124d8d73a5a350ded.svg",
+    "index.html": "./index.html",
+    "static/media/minima-sign.svg": "./static/media/minima-sign.1c0c72a17fbac4ddddff883d05d25a58.svg",
+    "main.e5ee8716.css.map": "./static/css/main.e5ee8716.css.map",
+    "main.b289a157.js.map": "./static/js/main.b289a157.js.map",
+    "787.a38f208b.chunk.js.map": "./static/js/787.a38f208b.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e5ee8716.css",
+    "static/js/main.b289a157.js"
+  ]
+}
