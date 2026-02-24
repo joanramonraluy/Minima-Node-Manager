@@ -416,7 +416,7 @@ function addNode() {
                 // Visual feedback: change button color
                 const originalBg = copyBtn.style.backgroundColor;
                 const originalColor = copyBtn.style.color;
-                copyBtn.style.setProperty('background-color', 'var(--accent-primary)');
+                copyBtn.style.setProperty('background-color', '#38b000'); // Green for success
                 copyBtn.style.color = '#000';
                 copyBtn.textContent = '✓ Copied';
                 setTimeout(() => {

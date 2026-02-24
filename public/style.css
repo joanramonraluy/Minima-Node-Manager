@@ -606,6 +606,18 @@ header {
     border-color: #555;
 }
 
+/* Clear Action (Clear Log) - Amber/Orange */
+.btn-clear {
+    background-color: #fb8500;
+    color: #000;
+    border: 1px solid #fb8500;
+}
+
+.btn-clear:hover {
+    background-color: #ffb703;
+    color: #000;
+}
+
 /* Red / Danger aliases */
 .btn-red {
     background-color: var(--accent-red);
@@ -628,14 +640,14 @@ header {
 
 /* Neutral/Toggle (Browse, View Ops) -*/
 .btn-copy {
-    background-color: #333;
+    background-color: #3a86ff;
+    /* Bright Blue */
     color: #fff;
-    /* Ensure white text for visibility */
-    border: 1px solid #444;
+    border: 1px solid #3a86ff;
 }
 
 .btn-copy:hover {
-    background-color: #444;
+    background-color: #4361ee;
     color: #fff;
 }
 
