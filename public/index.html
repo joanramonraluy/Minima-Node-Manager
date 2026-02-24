@@ -513,6 +513,27 @@
                     </small>
                 </div>
 
+                <!-- RAM Limit Option -->
+                <div
+                    style="margin-bottom: 15px; padding: 15px; background: #222; border-radius: 4px; border: 1px solid #444;">
+                    <h4 style="margin: 0 0 10px 0; color: var(--accent-primary);">Node Resource Limits</h4>
+                    <div style="display: flex; gap: 20px; align-items: center;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label for="global-ram-limit" style="white-space: nowrap;">Max RAM:</label>
+                            <input type="text" id="global-ram-limit" value="256m" placeholder="256m"
+                                class="command-input" style="flex: 1; max-width: 100px;">
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label for="global-cpu-limit" style="white-space: nowrap;">Cores:</label>
+                            <input type="number" id="global-cpu-limit" value="1" min="1" max="64" class="command-input"
+                                style="flex: 1; max-width: 80px;">
+                        </div>
+                    </div>
+                    <small style="color: #888; display: block; margin-top: 5px;">
+                        Set JVM <code>-Xmx</code> (e.g. 256m) and <code>-XX:ActiveProcessorCount</code>.
+                    </small>
+                </div>
+
                 <!-- Peer Discovery Automation -->
                 <div
                     style="margin-bottom: 15px; padding: 15px; background: #222; border-radius: 4px; border: 1px solid #444;">

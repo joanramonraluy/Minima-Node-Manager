@@ -361,7 +361,9 @@ function addNode() {
 
             // Auto-sync peers from URL if enabled
             const autoSyncCheck = document.getElementById('auto-sync-peers-check');
-            if (autoSyncCheck && autoSyncCheck.checked) {
+            const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
+
+            if (autoSyncCheck && autoSyncCheck.checked && isMainnetMode) {
                 // Delay sync slightly to ensure node has time to open its ports/P2P
                 setTimeout(() => {
                     socket.emit('sync-peers');
@@ -579,7 +581,9 @@ let globalConfig = {
     apkInstallPath: '',
     adbPushPath: '',
     adbPushRemotePath: '/sdcard/Download/',
-    mobilePackageName: 'com.minima.android'
+    mobilePackageName: 'com.minima.android',
+    ramLimit: '256m',
+    cpuLimit: 1
 };
 
 // Listen for Config from Server
@@ -596,6 +600,12 @@ socket.on('config-update', (config) => {
     const apkPackageNameInput = document.getElementById('apk-package-name-input');
     if (configMobilePkgInput) configMobilePkgInput.value = config.mobilePackageName || 'com.minima.android';
     if (apkPackageNameInput) apkPackageNameInput.value = config.mobilePackageName || 'com.minima.android';
+
+    const ramLimitInput = document.getElementById('global-ram-limit');
+    if (ramLimitInput) ramLimitInput.value = globalConfig.ramLimit || '256m';
+
+    const cpuLimitInput = document.getElementById('global-cpu-limit');
+    if (cpuLimitInput) cpuLimitInput.value = globalConfig.cpuLimit || 1;
 
     const dappLocationInput = document.getElementById('dapp-location-config');
     if (dappLocationInput) dappLocationInput.value = globalConfig.dappLocation;
@@ -635,6 +645,16 @@ saveConfigBtn.onclick = () => {
         globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || 'com.minima.android';
     } else if (apkPackageNameInput) {
         globalConfig.mobilePackageName = apkPackageNameInput.value.trim() || 'com.minima.android';
+    }
+
+    const ramLimitInput = document.getElementById('global-ram-limit');
+    if (ramLimitInput) {
+        globalConfig.ramLimit = ramLimitInput.value.trim() || '256m';
+    }
+
+    const cpuLimitInput = document.getElementById('global-cpu-limit');
+    if (cpuLimitInput) {
+        globalConfig.cpuLimit = parseInt(cpuLimitInput.value) || 1;
     }
 
     addToGlobalLog(`[Config] Saved: Project=${globalConfig.projectPath}, Dapp=${globalConfig.dappName}, ADB=${globalConfig.adbPath}`);

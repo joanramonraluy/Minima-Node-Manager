@@ -37,6 +37,8 @@ echo "  MDS: http://127.0.0.1:$MDS_PORT"
 clean_flag=""
 connect_flag=""
 genesis_flag=""
+ram_limit=""
+cpu_limit=""
 
 # Parse Args
 while [[ $# -gt 0 ]]; do
@@ -48,6 +50,14 @@ while [[ $# -gt 0 ]]; do
     -genesis)
       genesis_flag="-genesis"
       shift
+      ;;
+    -ram)
+      ram_limit="$2"
+      shift 2
+      ;;
+    -cpus)
+      cpu_limit="$2"
+      shift 2
       ;;
     -connect)
       CONNECT_TARGET="$2"
@@ -64,12 +74,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Prepare RAM limit flag for Java
+xmx_flag=""
+if [ -n "$ram_limit" ]; then
+    xmx_flag="-Xmx$ram_limit"
+fi
+
+cpu_flag=""
+if [ -n "$cpu_limit" ]; then
+    cpu_flag="-XX:ActiveProcessorCount=$cpu_limit"
+fi
+
 export MINIMA_PORT=$PORT
 
 # Execute Minima directly on host
 # We use nohup or just exec if called from node spawn
 # Since server.js spawns this, we can just exec java
-exec java -jar ./minima.jar \
+exec java $xmx_flag $cpu_flag -jar ./minima.jar \
   -data $DATA_NAME \
   -basefolder $DATA_NAME \
   -port $PORT \

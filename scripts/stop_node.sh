@@ -18,7 +18,7 @@ if ! ip netns list | grep -q "$NS"; then
 fi
 
 # Kill Minima process for this specific node
-# We use -data flag to identify the specific process since PID namespace is shared
-pkill -f "minima.jar.*-data node$NODE_ID"
+# We use -data flag with 'nodes/' prefix and trailing space to identify the specific process
+pkill -f "minima.jar.*-data nodes/node$NODE_ID "
 
 echo "Signal sent to Minima node$NODE_ID."

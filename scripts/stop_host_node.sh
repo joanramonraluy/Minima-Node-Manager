@@ -18,7 +18,7 @@ echo "Stopping HOST Node $NODE_ID ($DATA_NAME)..."
 
 # Kill Minima process for this specific node
 # We use -data flag to identify the specific process
-pkill -f "minima.jar.*-data $DATA_NAME"
+pkill -f "minima.jar.*-data $DATA_NAME "
 
 if [ $? -eq 0 ]; then
     echo "Signal sent to Host Node $NODE_ID."

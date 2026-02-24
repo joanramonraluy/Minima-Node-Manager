@@ -39,7 +39,9 @@ let globalConfig = {
     apkInstallPath: '',
     adbPushPath: '',
     adbPushRemotePath: '/sdcard/Download/',
-    mobilePackageName: 'com.minima.android'
+    mobilePackageName: 'com.minima.android',
+    ramLimit: '256m',
+    cpuLimit: 1
 };
 
 // Load Config from File
@@ -110,6 +112,18 @@ function startNode(id, options = {}) {
             args.push(connect);
         }
 
+        // Add RAM limit if configured
+        if (globalConfig.ramLimit) {
+            args.push('-ram');
+            args.push(globalConfig.ramLimit);
+        }
+
+        // Add CPU limit if configured
+        if (globalConfig.cpuLimit) {
+            args.push('-cpus');
+            args.push(globalConfig.cpuLimit);
+        }
+
         // Add Advanced Params
         if (advancedParams && Array.isArray(advancedParams)) {
             advancedParams.forEach(param => {
@@ -152,25 +166,30 @@ function startNode(id, options = {}) {
 }
 
 function stopNode(id) {
-    if (nodeProcesses[id]) {
-        // Determine script based on type
-        const type = nodeTypes[id] || 'virtual';
-        const script = type === 'host' ? './scripts/stop_host_node.sh' : './scripts/stop_node.sh';
+    // Determine script based on type
+    // If we don't know the type, we default to 'virtual' as it's the most common
+    // but a thorough 'Stop All' might want to try both if the server was restarted.
+    const type = nodeTypes[id] || 'virtual';
+    const script = type === 'host' ? './scripts/stop_host_node.sh' : './scripts/stop_node.sh';
 
-        const stopScript = spawn(script, [id]);
+    const stopScript = spawn(script, [id]);
 
-        stopScript.stdout.on('data', (d) => {
-            io.emit('log-update', { id, type: 'system', content: d.toString() });
-        });
+    stopScript.stdout.on('data', (d) => {
+        io.emit('log-update', { id, type: 'system', content: d.toString() });
+    });
 
-        // We don't manually delete nodeProcesses[id] here; 
-        // the startNode child process will emit 'close' when it actually exits,
-        // and that listener cleans up the map and updates status.
+    // If the server was restarted and we don't have the child process reference, 
+    // we can't wait for 'close'. The scripts will do their job.
+    if (!nodeProcesses[id]) {
+        console.log(`[System] Stop signal sent to external/restarted Node ${id}`);
     }
 }
 
 function stopAll() {
-    Object.keys(nodeProcesses).forEach(id => stopNode(id));
+    console.log(`[System] Stopping all possible nodes (1-${NODE_COUNT})...`);
+    for (let i = 1; i <= NODE_COUNT; i++) {
+        stopNode(i);
+    }
 }
 
 // Socket.io Connection
@@ -280,13 +299,16 @@ io.on('connection', (socket) => {
             let data = '';
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
-                const peers = data.trim().split(',').map(p => p.trim()).filter(p => p);
-                if (peers.length === 0) {
+                const allPeers = data.trim().split(',').map(p => p.trim()).filter(p => p);
+                if (allPeers.length === 0) {
                     io.emit('global-log', '[Error] No peers found in list.\n');
                     return;
                 }
 
-                io.emit('global-log', `[System] Found ${peers.length} peers. Synchronizing to all nodes...\n`);
+                // Shuffle and pick only 2 peers to avoid connection flood (especially in test mode)
+                const peers = allPeers.sort(() => 0.5 - Math.random()).slice(0, 2);
+
+                io.emit('global-log', `[System] Found ${allPeers.length} peers. Selecting 2 random peers for synchronization to all nodes...\n`);
 
                 // Distribute to all running nodes
                 Object.keys(nodeProcesses).forEach(id => {
@@ -296,7 +318,7 @@ io.on('connection', (socket) => {
                             nodeProcesses[id].stdin.write(cmd + '\n');
                         }
                     });
-                    io.emit('log-update', { id, type: 'system', content: `[System] Connection attempts started for ${peers.length} peers from discovery URL.\n` });
+                    io.emit('log-update', { id, type: 'system', content: `[System] Connection attempts started for ${peers.length} random peers from discovery URL.\n` });
                 });
 
                 io.emit('global-log', '[System] Peer synchronization complete.\n');

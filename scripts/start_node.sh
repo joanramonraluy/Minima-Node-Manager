@@ -13,7 +13,7 @@ BRIDGE="minima-br"
 NS="node$NODE_ID"
 VETH="veth$NODE_ID"
 VETH_PEER="vPeer$NODE_ID"
-IP="10.0.0.1$NODE_ID/24"
+IP="10.0.0.$((10 + NODE_ID))/24"
 GW="10.0.0.1"
 
 # --- Networking Setup ---
@@ -71,6 +71,8 @@ echo "Starting Node $NODE_ID ($DATA_NAME) in namespace $NS on $IP:$PORT..."
 clean_flag=""
 connect_flag=""
 genesis_flag=""
+ram_limit=""
+cpu_limit=""
 
 # Parse Args
 while [[ $# -gt 0 ]]; do
@@ -82,6 +84,14 @@ while [[ $# -gt 0 ]]; do
     -genesis)
       genesis_flag="-genesis"
       shift
+      ;;
+    -ram)
+      ram_limit="$2"
+      shift 2
+      ;;
+    -cpus)
+      cpu_limit="$2"
+      shift 2
       ;;
     -connect)
       CONNECT_TARGET="$2"
@@ -98,12 +108,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Prepare RAM limit flag for Java
+xmx_flag=""
+if [ -n "$ram_limit" ]; then
+    xmx_flag="-Xmx$ram_limit"
+fi
+
+cpu_flag=""
+if [ -n "$cpu_limit" ]; then
+    cpu_flag="-XX:ActiveProcessorCount=$cpu_limit"
+fi
+
 export MINIMA_PORT=$PORT
 
 # Execute Minima inside Namespace
 # We use 'exec' so the shell process is replaced by ip netns exec -> java
 # Note: tee log file path updated to match new structure
-exec ip netns exec $NS java -jar ./minima.jar \
+exec ip netns exec $NS java $xmx_flag $cpu_flag -jar ./minima.jar \
   -data $DATA_NAME \
   -basefolder $DATA_NAME \
   -port $PORT \
