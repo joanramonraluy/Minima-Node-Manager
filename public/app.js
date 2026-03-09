@@ -265,9 +265,13 @@ function addNode() {
 
         const connectVal = connectInput.value.trim();
         const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
-        if ((i > 1 || isMainnetMode) && connectVal) {
-            cmd += ` -connect ${connectVal}`;
+        if (connectVal) {
+            const flag = isMainnetMode ? '-p2pnodes' : '-connect';
+            cmd += ` ${flag} ${connectVal}`;
+        } else if (isMainnetMode) {
+            cmd += ' -p2pnodes megammr.minima.global:9001';
         }
+
 
         paramChecks.forEach(chk => {
             // Mainnet: skip -test flag if checked
@@ -325,6 +329,7 @@ function addNode() {
     paramChecks.forEach(chk => chk.addEventListener('change', updateCommandPreview));
 
     // Initialize Preview
+    card.updatePreview = updateCommandPreview;
     updateCommandPreview();
 
     const clearLogBtn = card.querySelector('.clear-log-btn');
@@ -1530,22 +1535,12 @@ function updateGlobalTemplate() {
     if (!isMainnet && globalGenesisCheck && globalGenesisCheck.checked) cmd += ' -genesis';
 
     // Add Connect
-    // If Mainnet AND no custom connect, force megammr
-    if (isMainnet) {
-        if (globalConnectInput && !globalConnectInput.value.trim()) {
-            // If empty, auto-fill for mainnet
-            cmd += ' -connect megammr.minima.global:9001';
-        } else if (globalConnectInput && globalConnectInput.value.trim()) {
-            cmd += ` -connect ${globalConnectInput.value.trim()}`;
-        } else {
-            // Fallback
-            cmd += ' -connect megammr.minima.global:9001';
-        }
-    } else {
-        // Testnet behavior
-        if (globalConnectInput && globalConnectInput.value.trim()) {
-            cmd += ` -connect ${globalConnectInput.value.trim()}`;
-        }
+    if (connectVal) {
+        const flag = isMainnet ? '-p2pnodes' : '-connect';
+        cmd += ` ${flag} ${connectVal}`;
+    } else if (isMainnet) {
+        // If Mainnet AND no custom connect, force megammr
+        cmd += ' -p2pnodes megammr.minima.global:9001';
     }
 
     // Add Advanced Params
@@ -1592,6 +1587,14 @@ if (globalNetworkRadios) {
                 globalHostCheck.parentElement.title = "Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.";
             }
             updateGlobalTemplate();
+
+            // Update all individual node previews
+            for (let i = 1; i <= visibleNodes; i++) {
+                const card = document.getElementById(`node-${i}`);
+                if (card && card.updatePreview) {
+                    card.updatePreview();
+                }
+            }
         });
     });
 }

@@ -2,10 +2,12 @@
   "projectPath": "/home/joanramon/Minima/metachain",
   "dappName": "MetaChain",
   "envPath": "/home/joanramon/Minima/metachain/.env",
-  "dappLocation": "/home/joanramon/Minima/metachain/metachain-0.0.8.mds.zip",
+  "dappLocation": "/home/joanramon/Minima/metachain/metachain-0.9.mds.zip",
   "adbPath": "/home/joanramon/Android/Sdk/platform-tools/adb",
   "apkInstallPath": "/home/joanramon/Minima/metachain/android/app/build/outputs/apk/debug/app-debug.apk",
-  "adbPushPath": "/home/joanramon/Minima/metachain/metachain-0.0.8.mds.zip",
+  "adbPushPath": "/home/joanramon/Minima/metachain/metachain-0.9.mds.zip",
   "adbPushRemotePath": "/sdcard/Download/",
-  "mobilePackageName": "com.metachain.app"
+  "mobilePackageName": "com.metachain.app",
+  "ramLimit": "256m",
+  "cpuLimit": 1
 }
