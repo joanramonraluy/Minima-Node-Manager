@@ -353,6 +353,9 @@
                     <p class="description"><strong>Build All (Zip + APK):</strong> The complete build pipeline.
                         Generates both the `.mds.zip` and the Android APK.
                     </p>
+                    <p class="description"><strong>Zip &amp; Install to Nodes:</strong> Packages the raw source workspace
+                        into a <code>.mds</code> file and installs it directly to all running local nodes. No build step — use this for plain JS MiniDapps.
+                    </p>
                     <div class="button-group">
                         <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
                             & Zip</button>
@@ -360,6 +363,7 @@
                             style="background-color: #3ddc84; color: #000;">Build Android APK</button>
                         <button id="build-full-btn" class="btn btn-blue"
                             style="background-color: #3a86ff; color: #fff;">Build All (Zip + APK)</button>
+                        <button id="zip-install-btn" class="btn" style="background-color: #f77f00; color: #fff;">Zip &amp; Install to Nodes</button>
                     </div>
                     <div class="build-output-container">
                         <div class="output-header">

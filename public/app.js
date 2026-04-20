@@ -1056,6 +1056,20 @@ if (buildFullBtn) {
 }
 
 
+const zipInstallBtn = document.getElementById('zip-install-btn');
+if (zipInstallBtn) {
+    zipInstallBtn.onclick = () => {
+        const workspace = document.getElementById('build-workspace-path').value.trim();
+        buildOutputObj.textContent = 'Starting Zip & Install...\n';
+        zipInstallBtn.disabled = true;
+        socket.emit('run-zip-install', { workspace });
+    };
+}
+
+socket.on('zip-install-complete', () => {
+    if (zipInstallBtn) zipInstallBtn.disabled = false;
+});
+
 if (copyBuildOutputBtn) {
     copyBuildOutputBtn.onclick = () => {
         navigator.clipboard.writeText(buildOutputObj.textContent)

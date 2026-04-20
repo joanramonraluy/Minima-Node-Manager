@@ -734,6 +734,53 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         });
     });
 
+    socket.on('run-zip-install', (data) => {
+        const workspace = (data && data.workspace) ? data.workspace : globalConfig.projectPath;
+        io.emit('build-output', `[Build] Zipping ${workspace} -> /tmp/minidapp.mds ...\n`);
+
+        // Remove stale artifact so zip creates a fresh file instead of appending
+        try { require('fs').unlinkSync('/tmp/minidapp.mds'); } catch (e) { /* no previous file */ }
+
+        const zipCmd = `cd "${workspace}/public" && zip /tmp/minidapp.mds index.html service.js && cd "${workspace}" && zip -r /tmp/minidapp.mds dapp.conf public core sdk dapp -x "*.git*" -x "*/node_modules/*"`;
+        const zip = spawn(zipCmd, [], { cwd: workspace, shell: true });
+
+        zip.stdout.on('data', (d) => {
+            io.emit('build-output', d.toString());
+        });
+
+        zip.stderr.on('data', (d) => {
+            io.emit('build-output', `[zip] ${d.toString().trim()}\n`);
+        });
+
+        zip.on('close', (code) => {
+            if (code !== 0) {
+                io.emit('build-output', `\n❌ Zip failed (exit code ${code}).\n`);
+                io.emit('zip-install-complete');
+                return;
+            }
+            io.emit('build-output', `[Build] Zip complete. Sending install to running nodes...\n`);
+
+            const runningIds = Object.keys(nodeProcesses).filter(id => nodeProcesses[id]);
+            if (runningIds.length === 0) {
+                io.emit('build-output', `[Build] No running nodes found. Install skipped.\n`);
+                io.emit('zip-install-complete');
+                return;
+            }
+
+            runningIds.forEach((id) => {
+                try {
+                    nodeProcesses[id].stdin.write('mds action:install file:/tmp/minidapp.mds\n');
+                    io.emit('build-output', `[Build] Install command sent to Node ${id}.\n`);
+                } catch (e) {
+                    io.emit('build-output', `[Build] Error sending to Node ${id}: ${e.message}\n`);
+                }
+            });
+
+            io.emit('build-output', `\n✅ Zip & Install complete (${runningIds.length} node(s)).\n`);
+            io.emit('zip-install-complete');
+        });
+    });
+
     socket.on('run-android-build', (data) => {
         const { deviceId } = data || {};
         const cwd = globalConfig.projectPath;

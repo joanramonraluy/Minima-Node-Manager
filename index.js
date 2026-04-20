@@ -21,6 +21,8 @@ async function main() {
     const NODE_COUNT = answer.nodeCount;
     const nodeProcesses = {};
 
+    const config = JSON.parse(require('fs').readFileSync('./config.json', 'utf8'));
+
     const screen = blessed.screen({
         smartCSR: true,
         title: 'Minima Node Manager',
@@ -47,6 +49,7 @@ async function main() {
             'Export Logs',
             'Stop All',
             'Kill All Minima (Force)',
+            'Build Pipeline',
             'Exit',
         ],
     });
@@ -454,6 +457,144 @@ async function main() {
         logs[0].log(`[System] Logs exported to ${filename}`);
     }
 
+    function showBuildPipeline() {
+        var defaultWorkspace = config.projectPath || '';
+
+        var panel = blessed.box({
+            parent: screen,
+            top: 'center',
+            left: 'center',
+            width: '60%',
+            height: 13,
+            label: ' Build Pipeline ',
+            border: { type: 'line', fg: 'yellow' },
+            keys: true,
+            mouse: true,
+            style: { bg: 'black', fg: 'white' }
+        });
+        panel.setFront();
+
+        blessed.text({
+            parent: panel,
+            top: 1,
+            left: 2,
+            content: 'Build Workspace:',
+            style: { fg: 'white', bg: 'black' }
+        });
+
+        var workspaceInput = blessed.textbox({
+            parent: panel,
+            top: 2,
+            left: 2,
+            right: 2,
+            height: 1,
+            inputOnFocus: true,
+            keys: true,
+            mouse: true,
+            style: { bg: 'blue', fg: 'white', focus: { bg: 'white', fg: 'black' } }
+        });
+        workspaceInput.setValue(defaultWorkspace);
+
+        var zipBtn = blessed.button({
+            parent: panel,
+            top: 5,
+            left: 2,
+            shrink: true,
+            padding: { left: 1, right: 1 },
+            content: 'Zip and Install',
+            mouse: true,
+            keys: true,
+            style: { bg: 'green', fg: 'white', focus: { bg: 'white', fg: 'green' }, hover: { bg: 'white', fg: 'green' } }
+        });
+
+        var closeBtn = blessed.button({
+            parent: panel,
+            top: 5,
+            left: 22,
+            shrink: true,
+            padding: { left: 1, right: 1 },
+            content: 'Close',
+            mouse: true,
+            keys: true,
+            style: { bg: 'red', fg: 'white', focus: { bg: 'white', fg: 'red' }, hover: { bg: 'white', fg: 'red' } }
+        });
+
+        var statusText = blessed.text({
+            parent: panel,
+            top: 8,
+            left: 2,
+            right: 2,
+            content: '',
+            style: { fg: 'yellow', bg: 'black' }
+        });
+
+        zipBtn.on('press', function() {
+            var workspace = workspaceInput.getValue().trim();
+            if (!workspace) {
+                statusText.setContent('Error: workspace path is empty.');
+                screen.render();
+                return;
+            }
+
+            statusText.setContent('Zipping...');
+            screen.render();
+
+            var zipProc = spawn('zip', ['-r', '/tmp/minidapp.mds', workspace + '/', '-x', '*.git*']);
+
+            zipProc.stderr.on('data', function(data) {
+                if (logs[0]) logs[0].log('[Build] zip: ' + data.toString().trim());
+            });
+
+            zipProc.on('close', function(code) {
+                if (code !== 0) {
+                    statusText.setContent('Zip failed (code ' + code + ').');
+                    if (logs[0]) logs[0].log('[Build] Zip failed with code ' + code);
+                    screen.render();
+                    return;
+                }
+
+                statusText.setContent('Zipped. Sending install to nodes...');
+                if (logs[0]) logs[0].log('[Build] Zip complete. Sending install command...');
+                screen.render();
+
+                var runningNodes = Object.keys(nodeProcesses);
+                if (runningNodes.length === 0) {
+                    statusText.setContent('Zip done. No running nodes to install to.');
+                    if (logs[0]) logs[0].log('[Build] No running nodes found.');
+                    screen.render();
+                    return;
+                }
+
+                runningNodes.forEach(function(id) {
+                    try {
+                        nodeProcesses[id].stdin.write('mds action:install file:/tmp/minidapp.mds\n');
+                        if (logs[0]) logs[0].log('[Build] Install command sent to Node ' + id);
+                    } catch (e) {
+                        if (logs[0]) logs[0].log('[Build] Error sending to Node ' + id + ': ' + e.message);
+                    }
+                });
+
+                statusText.setContent('Install command sent to ' + runningNodes.length + ' node(s).');
+                screen.render();
+            });
+        });
+
+        closeBtn.on('press', function() {
+            panel.destroy();
+            menu.focus();
+            screen.render();
+        });
+
+        panel.key(['escape'], function() {
+            panel.destroy();
+            menu.focus();
+            screen.render();
+        });
+
+        workspaceInput.focus();
+        screen.render();
+    }
+
     function stopAll() {
         Object.keys(nodeProcesses).forEach((id) => {
             logs[id - 1].log(`[System] Killing Node ${id}...`);
@@ -524,8 +665,9 @@ async function main() {
         } else if (text === 'Kill All Minima (Force)') {
             const kill = spawn('./scripts/kill_all_nodes.sh');
             kill.stdout.on('data', d => logs[0].log(`[System] ${d.toString().trim()}`));
-            // Clear internal tracking
             Object.keys(nodeProcesses).forEach(key => delete nodeProcesses[key]);
+        } else if (text === 'Build Pipeline') {
+            showBuildPipeline();
         } else if (text === 'Exit') {
             stopAll();
             process.exit(0);
