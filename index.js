@@ -539,7 +539,7 @@ async function main() {
             statusText.setContent('Zipping...');
             screen.render();
 
-            var zipProc = spawn('zip', ['-r', '/tmp/minidapp.mds', workspace + '/', '-x', '*.git*']);
+            var zipProc = spawn('zip', ['-r', '/tmp/minidapp.mds', workspace + '/', '-x', '*.git*', '*/node_modules/*', '*/refs/*', '*/logs/*', '*.log', '.env*', '*/.env*', '.DS_Store', 'Thumbs.db', '*/.vscode/*', '*/.idea/*', '*.swp', '*.swo']);
 
             zipProc.stderr.on('data', function(data) {
                 if (logs[0]) logs[0].log('[Build] zip: ' + data.toString().trim());
