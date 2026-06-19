@@ -539,7 +539,7 @@ async function main() {
             statusText.setContent('Zipping...');
             screen.render();
 
-            var zipCmd = 'cd ' + JSON.stringify(workspace) + ' && zip -r /tmp/minidapp.mds . -x "*.git*" "*/node_modules/*" "*/refs/*" "*/logs/*" "*.log" ".env*" "*/.env*" ".DS_Store" "Thumbs.db" "*/.vscode/*" "*/.idea/*" "*.swp" "*.swo" "MinimaAds.mds.zip" "latest-deploy.mds"';
+            var zipCmd = 'cd ' + JSON.stringify(workspace) + ' && zip -r /tmp/minidapp.mds . -x "*.mds" "*.mds.zip" "*.git*"';
             var zipProc = execFile('sh', ['-c', zipCmd]);
 
             zipProc.stderr.on('data', function(data) {
