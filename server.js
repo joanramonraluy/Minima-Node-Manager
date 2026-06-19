@@ -758,16 +758,16 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
         // Dynamically include everything except known non-MiniDapp items.
         // This way any new folder added to the project is automatically included.
         const EXCLUDE = new Set([
-            'refs', 'node_modules', '.git', '.claude', '.gitignore',
+            'refs', 'node_modules', '.git', '.claude', '.gitignore', 'docs',
             'AGENTS.md', 'CLAUDE.md', 'MinimaAds.md', 'PROJECT_INDEX.md',
             'PromptBase.md', 'AgentsVSTasks.txt', 'TASKS.md', 'README.md', 'LICENSE'
         ]);
         const entries = fs.readdirSync(workspace).filter(e => {
-            return !EXCLUDE.has(e) && !e.endsWith('.zip') && !e.endsWith('.mds');
+            return !EXCLUDE.has(e) && !e.endsWith('.zip') && !e.endsWith('.mds') && !e.endsWith('.md');
         });
 
         // index.html must be at the zip root; it lives in public/ so add it first from there.
-        const zipCmd = `cd "${workspace}/public" && zip "${targetZip}" index.html && cd "${workspace}" && zip -r "${targetZip}" ${entries.map(e => `"${e}"`).join(' ')} -x "*.git*" -x "*/node_modules/*" -x "*/refs/*" -x "*.zip" -x "*.mds"`;
+        const zipCmd = `cd "${workspace}/public" && zip "${targetZip}" index.html && cd "${workspace}" && zip -r "${targetZip}" ${entries.map(e => `"${e}"`).join(' ')} -x "*.git*" -x "*/node_modules/*" -x "*/refs/*" -x "*/docs/*" -x "*.zip" -x "*.mds" -x "*.md"`;
         const zip = spawn(zipCmd, [], { cwd: workspace, shell: true });
 
         zip.stdout.on('data', (d) => {
