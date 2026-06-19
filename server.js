@@ -558,68 +558,81 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             return;
         }
 
-        const modeStr = writeMode ? '(Write Mode)' : '(Read Mode)';
-        const nodes = Object.keys(nodeProcesses);
-
-        if (nodes.length === 0) {
-            io.emit('dapp-log', '[Error] No nodes are running. Start at least one node.');
-            return;
-        }
-
-        io.emit('dapp-log', `\n[Batch] Starting Smart Deploy ${modeStr} from ${filePath} on ${nodes.length} nodes...`);
-
-        nodes.forEach((id) => {
-            const sendAction = (nodeId, cmd, label) => {
-                sendMinimaRpc(nodeId, cmd, (err, json) => {
-                    if (err) {
-                        io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Request Failed - ${err.message}`);
-                    } else {
-                        if (json.status) {
-                            const respStr = json.response ? (typeof json.response === 'string' ? json.response : JSON.stringify(json.response)) : 'Done';
-                            io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Success - ${respStr}`);
-                        } else {
-                            const errStr = json.message || json.error || 'Unknown Error';
-                            io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Failed - ${errStr}`);
-                        }
+        // Auto-detect write permission from dapp.conf inside the zip
+        exec(`unzip -p "${filePath}" dapp.conf`, (confErr, confStdout) => {
+            let effectiveWriteMode = writeMode;
+            if (!confErr && confStdout) {
+                try {
+                    const conf = JSON.parse(confStdout);
+                    if (conf.permission === 'write') {
+                        effectiveWriteMode = true;
                     }
-                });
+                } catch (e) { /* ignore parse errors, use writeMode as-is */ }
             }
 
-            // 1. Check if dApp exists to decide between Install or Update
-            const targetName = globalConfig.dappName;
-            if (!targetName) {
-                io.emit('dapp-log', `\n[Batch] Node ${id}: Cannot deploy - No 'Dapp Name' configured in settings.`);
+            const modeStr = effectiveWriteMode ? '(Write Mode)' : '(Read Mode)';
+            const nodes = Object.keys(nodeProcesses);
+
+            if (nodes.length === 0) {
+                io.emit('dapp-log', '[Error] No nodes are running. Start at least one node.');
                 return;
             }
 
-            sendMinimaRpc(id, 'mds', (err, json) => {
-                const trustParams = writeMode ? ' trust:write' : '';
+            io.emit('dapp-log', `\n[Batch] Starting Smart Deploy ${modeStr} from ${filePath} on ${nodes.length} nodes...`);
 
-                if (err || !json.status || !json.response) {
-                    // Fallback to fresh install if check fails (might be clean node)
-                    const command = `mds action:install file:"${filePath}"${trustParams}`;
-                    sendAction(id, command, "Install");
+            nodes.forEach((id) => {
+                const sendAction = (nodeId, cmd, label) => {
+                    sendMinimaRpc(nodeId, cmd, (err, json) => {
+                        if (err) {
+                            io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Request Failed - ${err.message}`);
+                        } else {
+                            if (json.status) {
+                                const respStr = json.response ? (typeof json.response === 'string' ? json.response : JSON.stringify(json.response)) : 'Done';
+                                io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Success - ${respStr}`);
+                            } else {
+                                const errStr = json.message || json.error || 'Unknown Error';
+                                io.emit('dapp-log', `\n[Batch] Node ${nodeId}: ${label} Failed - ${errStr}`);
+                            }
+                        }
+                    });
+                }
+
+                // 1. Check if dApp exists to decide between Install or Update
+                const targetName = globalConfig.dappName;
+                if (!targetName) {
+                    io.emit('dapp-log', `\n[Batch] Node ${id}: Cannot deploy - No 'Dapp Name' configured in settings.`);
                     return;
                 }
 
-                const dapps = json.response;
-                const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+                sendMinimaRpc(id, 'mds', (err, json) => {
+                    const trustParams = effectiveWriteMode ? ' trust:write' : '';
 
-                const foundDapp = list.find(d => {
-                    const name = d.conf ? d.conf.name : d.name;
-                    return name && name.toLowerCase() === targetName.toLowerCase();
+                    if (err || !json.status || !json.response) {
+                        // Fallback to fresh install if check fails (might be clean node)
+                        const command = `mds action:install file:"${filePath}"${trustParams}`;
+                        sendAction(id, command, "Install");
+                        return;
+                    }
+
+                    const dapps = json.response;
+                    const list = Array.isArray(dapps) ? dapps : (dapps.minidapps || []);
+
+                    const foundDapp = list.find(d => {
+                        const name = d.conf ? d.conf.name : d.name;
+                        return name && name.toLowerCase() === targetName.toLowerCase();
+                    });
+
+                    if (foundDapp) {
+                        const uid = foundDapp.uid;
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: Found dApp '${targetName}' (${uid.substring(0, 8)}). Updating...`);
+                        const command = `mds action:update uid:"${uid}" file:"${filePath}"${trustParams}`;
+                        sendAction(id, command, "Update");
+                    } else {
+                        io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${targetName}' not found. Installing fresh...`);
+                        const command = `mds action:install file:"${filePath}"${trustParams}`;
+                        sendAction(id, command, "Install");
+                    }
                 });
-
-                if (foundDapp) {
-                    const uid = foundDapp.uid;
-                    io.emit('dapp-log', `\n[Batch] Node ${id}: Found dApp '${targetName}' (${uid.substring(0, 8)}). Updating...`);
-                    const command = `mds action:update uid:"${uid}" file:"${filePath}"${trustParams}`;
-                    sendAction(id, command, "Update");
-                } else {
-                    io.emit('dapp-log', `\n[Batch] Node ${id}: dApp '${targetName}' not found. Installing fresh...`);
-                    const command = `mds action:install file:"${filePath}"${trustParams}`;
-                    sendAction(id, command, "Install");
-                }
             });
         });
     });
@@ -736,12 +749,25 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
     socket.on('run-zip-install', (data) => {
         const workspace = (data && data.workspace) ? data.workspace : globalConfig.projectPath;
-        io.emit('build-output', `[Build] Zipping ${workspace} -> /tmp/minidapp.mds ...\n`);
+        const targetZip = path.join(workspace, 'latest-deploy.mds');
+        io.emit('build-output', `[Build] Zipping ${workspace} -> ${targetZip} ...\n`);
 
         // Remove stale artifact so zip creates a fresh file instead of appending
-        try { require('fs').unlinkSync('/tmp/minidapp.mds'); } catch (e) { /* no previous file */ }
+        try { fs.unlinkSync(targetZip); } catch (e) { /* no previous file */ }
 
-        const zipCmd = `cd "${workspace}/public" && zip /tmp/minidapp.mds index.html service.js && cd "${workspace}" && zip -r /tmp/minidapp.mds dapp.conf public core sdk dapp -x "*.git*" -x "*/node_modules/*"`;
+        // Dynamically include everything except known non-MiniDapp items.
+        // This way any new folder added to the project is automatically included.
+        const EXCLUDE = new Set([
+            'refs', 'node_modules', '.git', '.claude', '.gitignore',
+            'AGENTS.md', 'CLAUDE.md', 'MinimaAds.md', 'PROJECT_INDEX.md',
+            'PromptBase.md', 'AgentsVSTasks.txt', 'TASKS.md', 'README.md', 'LICENSE'
+        ]);
+        const entries = fs.readdirSync(workspace).filter(e => {
+            return !EXCLUDE.has(e) && !e.endsWith('.zip') && !e.endsWith('.mds');
+        });
+
+        // index.html must be at the zip root; it lives in public/ so add it first from there.
+        const zipCmd = `cd "${workspace}/public" && zip "${targetZip}" index.html && cd "${workspace}" && zip -r "${targetZip}" ${entries.map(e => `"${e}"`).join(' ')} -x "*.git*" -x "*/node_modules/*" -x "*/refs/*" -x "*.zip" -x "*.mds"`;
         const zip = spawn(zipCmd, [], { cwd: workspace, shell: true });
 
         zip.stdout.on('data', (d) => {
@@ -758,25 +784,69 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
                 io.emit('zip-install-complete');
                 return;
             }
-            io.emit('build-output', `[Build] Zip complete. Sending install to running nodes...\n`);
+            io.emit('build-output', `[Build] Zip complete. Deploying to running nodes...\n`);
 
             const runningIds = Object.keys(nodeProcesses).filter(id => nodeProcesses[id]);
             if (runningIds.length === 0) {
-                io.emit('build-output', `[Build] No running nodes found. Install skipped.\n`);
+                io.emit('build-output', `[Build] No running nodes found. Deploy skipped.\n`);
                 io.emit('zip-install-complete');
                 return;
             }
 
+            // Read target dApp name from workspace dapp.conf so we can
+            // update-if-exists instead of creating a duplicate install.
+            let targetName = null;
+            try {
+                const conf = JSON.parse(fs.readFileSync(path.join(workspace, 'dapp.conf'), 'utf8'));
+                targetName = conf.name;
+            } catch (e) {
+                io.emit('build-output', `[Build] Warning: could not read dapp.conf name (${e.message}). Falling back to fresh install on every node.\n`);
+            }
+
+            const filePath = targetZip;
+
+            const runAction = (id, command, label) => {
+                sendMinimaRpc(id, command, (err, json) => {
+                    if (err) {
+                        io.emit('build-output', `[Build] Node ${id}: ${label} Request Failed - ${err.message}\n`);
+                    } else if (json && json.status) {
+                        io.emit('build-output', `[Build] Node ${id}: ${label} Success ✓\n`);
+                    } else {
+                        const errStr = (json && (json.message || json.error)) || 'Unknown Error';
+                        io.emit('build-output', `[Build] Node ${id}: ${label} Failed - ${errStr}\n`);
+                    }
+                });
+            };
+
             runningIds.forEach((id) => {
-                try {
-                    nodeProcesses[id].stdin.write('mds action:install file:/tmp/minidapp.mds\n');
-                    io.emit('build-output', `[Build] Install command sent to Node ${id}.\n`);
-                } catch (e) {
-                    io.emit('build-output', `[Build] Error sending to Node ${id}: ${e.message}\n`);
+                if (!targetName) {
+                    runAction(id, `mds action:install file:"${filePath}"`, 'Install');
+                    return;
                 }
+
+                sendMinimaRpc(id, 'mds', (err, json) => {
+                    if (err || !json || !json.status || !json.response) {
+                        // Could not list — fall back to fresh install
+                        runAction(id, `mds action:install file:"${filePath}"`, 'Install (fallback)');
+                        return;
+                    }
+
+                    const list = Array.isArray(json.response) ? json.response : (json.response.minidapps || []);
+                    const foundDapp = list.find(d => {
+                        const name = d.conf ? d.conf.name : d.name;
+                        return name && name.toLowerCase() === targetName.toLowerCase();
+                    });
+
+                    if (foundDapp) {
+                        const uid = foundDapp.uid;
+                        runAction(id, `mds action:update uid:"${uid}" file:"${filePath}"`, `Update (${uid.substring(0, 8)})`);
+                    } else {
+                        runAction(id, `mds action:install file:"${filePath}"`, 'Install');
+                    }
+                });
             });
 
-            io.emit('build-output', `\n✅ Zip & Install complete (${runningIds.length} node(s)).\n`);
+            io.emit('build-output', `\n✅ Zip complete. Deploy dispatched to ${runningIds.length} node(s).\n`);
             io.emit('zip-install-complete');
         });
     });
