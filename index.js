@@ -1,6 +1,6 @@
 const blessed = require('neo-blessed');
 const contrib = require('blessed-contrib');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 // const inquirer = require('inquirer').default; // inquirer v10+ export
 
 async function main() {
@@ -539,7 +539,8 @@ async function main() {
             statusText.setContent('Zipping...');
             screen.render();
 
-            var zipProc = spawn('zip', ['-r', '/tmp/minidapp.mds', workspace + '/', '-x', '*.git*', '*/node_modules/*', '*/refs/*', '*/logs/*', '*.log', '.env*', '*/.env*', '.DS_Store', 'Thumbs.db', '*/.vscode/*', '*/.idea/*', '*.swp', '*.swo']);
+            var zipCmd = 'cd ' + JSON.stringify(workspace) + ' && zip -r /tmp/minidapp.mds . -x "*.git*" "*/node_modules/*" "*/refs/*" "*/logs/*" "*.log" ".env*" "*/.env*" ".DS_Store" "Thumbs.db" "*/.vscode/*" "*/.idea/*" "*.swp" "*.swo" "MinimaAds.mds.zip" "latest-deploy.mds"';
+            var zipProc = execFile('sh', ['-c', zipCmd]);
 
             zipProc.stderr.on('data', function(data) {
                 if (logs[0]) logs[0].log('[Build] zip: ' + data.toString().trim());
