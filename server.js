@@ -26,6 +26,27 @@ const sudoUser = process.env.SUDO_USER || 'joanramon';
 const nodeProcesses = {};
 const nodeTypes = {}; // 'virtual' | 'host'
 
+// In-memory ring buffer for node logs: { id: [ { type: 'stdout'|'stderr'|'system'|'command', text: string }, ... ] }
+const nodeLogBuffers = {};
+const MAX_LOG_LINES = 2000;
+
+function addLogToBuffer(id, type, content) {
+    if (!id || content === undefined || content === null) return;
+    if (!nodeLogBuffers[id]) {
+        nodeLogBuffers[id] = [];
+    }
+    const str = content.toString();
+    const lines = str.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (i === lines.length - 1 && line === '') continue;
+        nodeLogBuffers[id].push({ type, text: line });
+    }
+    if (nodeLogBuffers[id].length > MAX_LOG_LINES) {
+        nodeLogBuffers[id].splice(0, nodeLogBuffers[id].length - MAX_LOG_LINES);
+    }
+}
+
 // Server-side Config State
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
@@ -77,8 +98,50 @@ function getAdbEnv() {
     return adbEnv;
 }
 
+// Parse JSON request bodies
+app.use(express.json());
+
 // Serve static files from 'public' directory
 app.use(express.static('public'));
+
+// --- HTTP API Endpoints (Read-only / Debug RPC) ---
+
+// GET /api/nodes/:id/log?lines=200&type=stdout|stderr|all
+app.get('/api/nodes/:id/log', (req, res) => {
+    const { id } = req.params;
+    const linesParam = parseInt(req.query.lines, 10);
+    const linesCount = (!isNaN(linesParam) && linesParam > 0) ? linesParam : 200;
+    const typeParam = (req.query.type || 'all').toLowerCase();
+
+    let entries = nodeLogBuffers[id] || [];
+    if (typeParam === 'stdout' || typeParam === 'stderr') {
+        entries = entries.filter(e => e.type === typeParam);
+    } else if (typeParam !== 'all') {
+        return res.status(400).type('text/plain').send(`Invalid type '${req.query.type}'. Allowed values: stdout, stderr, all\n`);
+    }
+
+    const selected = entries.slice(-linesCount);
+    const output = selected.map(e => e.text).join('\n') + (selected.length > 0 ? '\n' : '');
+    res.type('text/plain').send(output);
+});
+
+// POST /api/nodes/:id/rpc
+// Body: { "command": "coins coinid:0x..." }
+app.post('/api/nodes/:id/rpc', (req, res) => {
+    const { id } = req.params;
+    const { command } = req.body || {};
+
+    if (!command || typeof command !== 'string' || !command.trim()) {
+        return res.status(400).json({ error: 'Missing or invalid "command" in request body' });
+    }
+
+    sendMinimaRpc(id, command, (err, json) => {
+        if (err) {
+            return res.status(500).json({ error: err.message || String(err) });
+        }
+        res.json(json);
+    });
+});
 
 // Process Management
 function startNode(id, options = {}) {
@@ -135,30 +198,42 @@ function startNode(id, options = {}) {
         fullCommandStr = `${cmd} ${args.join(' ')}`;
     }
 
+    // Reset log buffer on start/restart
+    nodeLogBuffers[id] = [];
+
     // Explicitly show the command in the logs
-    io.emit('log-update', { id, type: 'system', content: `> Executing: ${fullCommandStr}\n` });
+    const execMsg = `> Executing: ${fullCommandStr}\n`;
+    io.emit('log-update', { id, type: 'system', content: execMsg });
+    addLogToBuffer(id, 'system', execMsg);
 
     // Spawn without 'sudo' prefix since server is already root
     const child = spawn(cmd, args);
     nodeProcesses[id] = child;
 
-    // Stream Output to Socket.io
+    // Stream Output to Socket.io and Ring-Buffer
     child.stdout.on('data', (data) => {
-        io.emit('log-update', { id, type: 'stdout', content: data.toString() });
+        const content = data.toString();
+        addLogToBuffer(id, 'stdout', content);
+        io.emit('log-update', { id, type: 'stdout', content });
     });
 
     child.stderr.on('data', (data) => {
-        io.emit('log-update', { id, type: 'stderr', content: data.toString() });
+        const content = data.toString();
+        addLogToBuffer(id, 'stderr', content);
+        io.emit('log-update', { id, type: 'stderr', content });
     });
 
     child.on('close', (code) => {
         delete nodeProcesses[id];
+        delete nodeLogBuffers[id];
         io.emit('node-status', { id, status: 'stopped', code });
         io.emit('log-update', { id, type: 'system', content: `[System] Node ${id} stopped with code ${code}\n` });
     });
 
     io.emit('node-status', { id, status: 'running' });
-    io.emit('log-update', { id, type: 'system', content: `[System] Node ${id} started\n` });
+    const startedMsg = `[System] Node ${id} started\n`;
+    io.emit('log-update', { id, type: 'system', content: startedMsg });
+    addLogToBuffer(id, 'system', startedMsg);
 
     if (options.autoName) {
         scheduleAutoName(id);
@@ -166,6 +241,7 @@ function startNode(id, options = {}) {
 }
 
 function stopNode(id) {
+    delete nodeLogBuffers[id];
     // Determine script based on type
     // If we don't know the type, we default to 'virtual' as it's the most common
     // but a thorough 'Stop All' might want to try both if the server was restarted.
@@ -227,7 +303,9 @@ io.on('connection', (socket) => {
         const { id, command } = data;
         if (nodeProcesses[id] && command) {
             nodeProcesses[id].stdin.write(command + '\n');
-            io.emit('log-update', { id, type: 'command', content: `> ${command}\n` });
+            const cmdContent = `> ${command}\n`;
+            io.emit('log-update', { id, type: 'command', content: cmdContent });
+            addLogToBuffer(id, 'command', cmdContent);
         }
     });
 
@@ -242,6 +320,7 @@ io.on('connection', (socket) => {
         kill.stdout.on('data', d => io.emit('global-log', d.toString()));
         // Force clear internal state
         Object.keys(nodeProcesses).forEach(id => delete nodeProcesses[id]);
+        Object.keys(nodeLogBuffers).forEach(id => delete nodeLogBuffers[id]);
         for (let i = 1; i <= NODE_COUNT; i++) io.emit('node-status', { id: i, status: 'stopped' });
     });
 

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Minima Node Manager
 
 A web-based management interface for running and managing multiple Minima blockchain nodes in isolated network namespaces. Built with Node.js, Express, and Socket.IO.
@@ -104,6 +103,64 @@ The application stores configuration in `config.json`:
 
 These can be configured through the UI in the "Vite Server" tab.
 
+## HTTP API (Debug & Automation)
+
+> [!WARNING]
+> Aquesta és una API pensada exclusivament per a desenvolupament i depuració local (CLI, `curl`, scripts d'automatització). **No l'exposeu fora de `localhost`**, ja que no requereix autenticació.
+
+Permet consultar l'estat i executar comandes als nodes sense necessitat d'obrir la interfície web ni dependre de Socket.IO.
+
+### 1. Consultar logs d'un node (Ring-Buffer)
+Retorna en **text pla** (`text/plain`) les últimes N línies capturades al buffer en memòria del node (fins a un màxim de 2000 línies retingudes):
+
+```
+GET /api/nodes/:id/log?lines=200&type=stdout|stderr|all
+```
+
+- **`id`**: Identificador numèric del node (ex. `1`).
+- **`lines`**: Nombre de línies a retornar (per defecte `200`).
+- **`type`**: Filtre de canal (`stdout`, `stderr` o `all`, per defecte `all`).
+
+**Exemples:**
+```bash
+# Obtenir les darreres 20 línies del Node 1
+curl http://localhost:3000/api/nodes/1/log?lines=20
+
+# Filtrar només el canal stdout
+curl http://localhost:3000/api/nodes/1/log?lines=50&type=stdout
+
+# Filtrar només el canal stderr
+curl http://localhost:3000/api/nodes/1/log?lines=50&type=stderr
+```
+
+### 2. Proxy RPC de Minima
+Envia comandes RPC al node a través de `sendMinimaRpc` i en retorna la resposta JSON directa:
+
+```
+POST /api/nodes/:id/rpc
+Content-Type: application/json
+
+{ "command": "<comanda-minima>" }
+```
+
+**Exemples:**
+```bash
+# Consultar el bloc actual
+curl -X POST http://localhost:3000/api/nodes/1/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"block"}'
+
+# Consultar monedes
+curl -X POST http://localhost:3000/api/nodes/1/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"coins"}'
+
+# Consultar l'estat general del node
+curl -X POST http://localhost:3000/api/nodes/1/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"status"}'
+```
+
 ## Architecture
 
 ### Network Setup
@@ -174,4 +231,3 @@ Built for the Minima blockchain ecosystem. UI inspired by [build.minima.global](
 ## Support
 
 For issues, questions, or contributions, please open an issue on GitHub.
-=======
