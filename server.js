@@ -828,18 +828,40 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
     socket.on('run-zip-install', (data) => {
         const workspace = (data && data.workspace) ? data.workspace : globalConfig.projectPath;
-        const targetZip = path.join(workspace, 'latest-deploy.mds');
-        io.emit('build-output', `[Build] Zipping ${workspace} -> ${targetZip} ...\n`);
+
+        // Read dapp.conf to determine name and version
+        let targetName = 'MinimaAds';
+        let version = '';
+        try {
+            const conf = JSON.parse(fs.readFileSync(path.join(workspace, 'dapp.conf'), 'utf8'));
+            if (conf.name) targetName = conf.name;
+            if (conf.version) version = conf.version;
+        } catch (e) {
+            io.emit('build-output', `[Build] Warning: could not read dapp.conf (${e.message}).\n`);
+        }
+
+        const buildDir = path.join(workspace, 'build');
+        if (!fs.existsSync(buildDir)) {
+            try { fs.mkdirSync(buildDir, { recursive: true }); } catch (e) {}
+        }
+
+        const packageFilename = version ? `${targetName}-v${version}.mds` : `${targetName}.mds`;
+        const targetZip = path.join(buildDir, packageFilename);
+        const legacyTargetZip = path.join(workspace, 'latest-deploy.mds');
+
+        io.emit('build-output', `[Build] Zipping ${targetName} ${version ? 'v' + version : ''} -> ${targetZip} ...\n`);
 
         // Remove stale artifact so zip creates a fresh file instead of appending
         try { fs.unlinkSync(targetZip); } catch (e) { /* no previous file */ }
+        try { fs.unlinkSync(legacyTargetZip); } catch (e) { /* no previous file */ }
 
         // Dynamically include everything except known non-MiniDapp items.
         // This way any new folder added to the project is automatically included.
         const EXCLUDE = new Set([
             'refs', 'node_modules', '.git', '.claude', '.gitignore', '.playwright-mcp', '.codex', 'docs', 'logs',
             'AGENTS.md', 'CLAUDE.md', 'MinimaAds.md', 'PROJECT_INDEX.md',
-            'PromptBase.md', 'AgentsVSTasks.txt', 'TASKS.md', 'README.md', 'LICENSE'
+            'PromptBase.md', 'AgentsVSTasks.txt', 'TASKS.md', 'README.md', 'LICENSE',
+            'build', 'dist', 'assets', 'scripts', '.github', '.publicignore', 'SECURITY.md'
         ]);
         const entries = fs.readdirSync(workspace).filter(e => {
             return !EXCLUDE.has(e) && !e.startsWith('.') && !e.endsWith('.zip') && !e.endsWith('.mds') && !e.endsWith('.md');
@@ -863,23 +885,17 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
                 io.emit('zip-install-complete');
                 return;
             }
-            io.emit('build-output', `[Build] Zip complete. Deploying to running nodes...\n`);
+
+            // Also maintain legacy latest-deploy.mds symlink/copy for backwards compatibility
+            try { fs.copyFileSync(targetZip, legacyTargetZip); } catch (e) {}
+
+            io.emit('build-output', `[Build] Zip complete (${packageFilename}). Deploying to running nodes...\n`);
 
             const runningIds = Object.keys(nodeProcesses).filter(id => nodeProcesses[id]);
             if (runningIds.length === 0) {
                 io.emit('build-output', `[Build] No running nodes found. Deploy skipped.\n`);
                 io.emit('zip-install-complete');
                 return;
-            }
-
-            // Read target dApp name from workspace dapp.conf so we can
-            // update-if-exists instead of creating a duplicate install.
-            let targetName = null;
-            try {
-                const conf = JSON.parse(fs.readFileSync(path.join(workspace, 'dapp.conf'), 'utf8'));
-                targetName = conf.name;
-            } catch (e) {
-                io.emit('build-output', `[Build] Warning: could not read dapp.conf name (${e.message}). Falling back to fresh install on every node.\n`);
             }
 
             const filePath = targetZip;
