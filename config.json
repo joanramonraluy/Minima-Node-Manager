@@ -1,8 +1,8 @@
 {
-  "projectPath": "/home/joanramon/Minima/MinimaAds",
+  "projectPath": "/home/joanramon/dev/Minima/MinimaAds",
   "dappName": "MinimaAds",
   "envPath": "",
-  "dappLocation": "/home/joanramon/Minima/MinimaAds/latest-deploy.mds",
+  "dappLocation": "/home/joanramon/dev/Minima/MinimaAds/latest-deploy.mds",
   "adbPath": "/home/joanramon/Android/Sdk/platform-tools/adb",
   "apkInstallPath": "",
   "adbPushPath": "",

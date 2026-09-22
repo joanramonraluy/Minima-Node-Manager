@@ -578,10 +578,10 @@ const saveConfigBtn = document.getElementById('save-config-btn');
 
 // Default Config
 let globalConfig = {
-    projectPath: '/home/joanramon/Minima/metachain',
+    projectPath: '/home/joanramon/dev/Minima/metachain',
     dappName: 'MetaChain',
-    envPath: '/home/joanramon/Minima/metachain/.env',
-    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
+    envPath: '/home/joanramon/dev/Minima/metachain/.env',
+    dappLocation: '/home/joanramon/dev/Minima/metachain/build/dapp.minidapp',
     adbPath: 'adb',
     apkInstallPath: '',
     adbPushPath: '',

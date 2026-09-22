@@ -52,10 +52,10 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 // Default Config
 let globalConfig = {
-    projectPath: '/home/joanramon/Minima/metachain',
+    projectPath: '/home/joanramon/dev/Minima/metachain',
     dappName: 'MetaChain',
-    envPath: '/home/joanramon/Minima/metachain/.env',
-    dappLocation: '/home/joanramon/Minima/metachain/build/dapp.minidapp',
+    envPath: '/home/joanramon/dev/Minima/metachain/.env',
+    dappLocation: '/home/joanramon/dev/Minima/metachain/build/dapp.minidapp',
     adbPath: 'adb', // Default to 'adb' in PATH, or full path like ~/Android/Sdk/platform-tools/adb
     apkInstallPath: '',
     adbPushPath: '',
@@ -861,14 +861,16 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
             'refs', 'node_modules', '.git', '.claude', '.gitignore', '.playwright-mcp', '.codex', 'docs', 'logs',
             'AGENTS.md', 'CLAUDE.md', 'MinimaAds.md', 'PROJECT_INDEX.md',
             'PromptBase.md', 'AgentsVSTasks.txt', 'TASKS.md', 'README.md', 'LICENSE',
-            'build', 'dist', 'assets', 'scripts', '.github', '.publicignore', 'SECURITY.md'
+            'build', 'dist', 'assets', 'scripts', '.github', '.publicignore', 'SECURITY.md',
+            'tests', 'test', '__tests__', 'site', 'coverage',
+            'package.json', 'package-lock.json', 'tsconfig.json'
         ]);
         const entries = fs.readdirSync(workspace).filter(e => {
             return !EXCLUDE.has(e) && !e.startsWith('.') && !e.endsWith('.zip') && !e.endsWith('.mds') && !e.endsWith('.md');
         });
 
         // index.html must be at the zip root; it lives in public/ so add it first from there.
-        const zipCmd = `cd "${workspace}/public" && zip "${targetZip}" index.html && cd "${workspace}" && zip -r "${targetZip}" ${entries.map(e => `"${e}"`).join(' ')} -x "*.git*" -x "*/node_modules/*" -x "*/refs/*" -x "*/docs/*" -x "*/logs/*" -x "*/.playwright-mcp/*" -x "*.zip" -x "*.mds" -x "*.md"`;
+        const zipCmd = `cd "${workspace}/public" && zip "${targetZip}" index.html && cd "${workspace}" && zip -r "${targetZip}" ${entries.map(e => `"${e}"`).join(' ')} -x "*.git*" -x "*/node_modules/*" -x "*/refs/*" -x "*/docs/*" -x "*/logs/*" -x "*/.playwright-mcp/*" -x "*/tests/*" -x "*/test/*" -x "*/__tests__/*" -x "*.test.js" -x "*.spec.js" -x "*/site/*" -x "*.zip" -x "*.mds" -x "*.md"`;
         const zip = spawn(zipCmd, [], { cwd: workspace, shell: true });
 
         zip.stdout.on('data', (d) => {
