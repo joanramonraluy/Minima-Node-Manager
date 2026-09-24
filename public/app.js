@@ -46,8 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Init
+    // Init: Load saved Global Start Configuration first, then initialize grid
+    const savedGlobalConfig = (typeof loadGlobalStartConfig === 'function') ? loadGlobalStartConfig() : null;
     initGrid();
+    if (savedGlobalConfig && savedGlobalConfig.hasApplied && typeof applyGlobalConfigToAllNodes === 'function') {
+        applyGlobalConfigToAllNodes({ showFeedback: false });
+    }
 });
 
 // Tab Switching Logic
@@ -331,6 +335,11 @@ function addNode() {
     // Initialize Preview
     card.updatePreview = updateCommandPreview;
     updateCommandPreview();
+
+    // If global start config was applied, sync this newly added card
+    if (window._hasGlobalConfigApplied && typeof applyGlobalConfigToSingleNode === 'function') {
+        applyGlobalConfigToSingleNode(card, i);
+    }
 
     const clearLogBtn = card.querySelector('.clear-log-btn');
     if (clearLogBtn) {
@@ -627,6 +636,18 @@ socket.on('config-update', (config) => {
     if (apkLocationInput) apkLocationInput.value = globalConfig.apkInstallPath || '';
     if (adbPushLocalInput) adbPushLocalInput.value = globalConfig.adbPushPath || '';
     if (adbPushRemoteInput) adbPushRemoteInput.value = globalConfig.adbPushRemotePath || '/sdcard/Download/';
+
+    // Sync Global Start Configuration from server if present and not in local storage
+    if (globalConfig.globalStartConfig && typeof applyGlobalStartConfigToUI === 'function') {
+        try {
+            const local = localStorage.getItem('minima_global_start_config');
+            if (!local) {
+                applyGlobalStartConfigToUI(globalConfig.globalStartConfig, true);
+            }
+        } catch (e) {
+            console.error('Error checking localStorage for global start config:', e);
+        }
+    }
 
     // Log only if it seems like a new update (to avoid log spam on connect)
     // addToGlobalLog('[System] Configuration synced from server.');
@@ -1290,6 +1311,9 @@ if (globalConfigBtn) {
 if (closeGlobalConfigBtn) {
     closeGlobalConfigBtn.onclick = () => {
         globalConfigModal.style.display = 'none';
+        if (typeof saveGlobalStartConfig === 'function') {
+            saveGlobalStartConfig({ immediate: true });
+        }
     };
 }
 
@@ -1297,6 +1321,9 @@ if (closeGlobalConfigBtn) {
 window.onclick = (event) => {
     if (event.target === globalConfigModal) {
         globalConfigModal.style.display = 'none';
+        if (typeof saveGlobalStartConfig === 'function') {
+            saveGlobalStartConfig({ immediate: true });
+        }
     }
     if (event.target === filePickerModal) {
         filePickerModal.style.display = 'none';
@@ -1502,19 +1529,42 @@ window.addToGlobalLog = (content) => appendLog('system-log', content);
 // Init
 // Init call moved to DOMContentLoaded listener at the top
 
-// --- Global Start Command Logic ---
-const applyGlobalCmdBtn = document.getElementById('apply-global-cmd-btn');
-const globalCmdTemplateInput = document.getElementById('global-cmd-template');
+// --- Global Start Configuration & Command Logic ---
+const STORAGE_KEY_GLOBAL_START = 'minima_global_start_config';
+window._isGlobalTemplateCustom = false;
+window._hasGlobalConfigApplied = false;
 
-// Global Params Elements
-// Global Params Elements
+const applyGlobalCmdBtn = document.getElementById('apply-global-cmd-btn');
+const saveGlobalConfigBtn = document.getElementById('save-global-config-btn');
+const globalCmdTemplateInput = document.getElementById('global-cmd-template');
 const globalHostCheck = document.getElementById('global-host-check');
 const globalCleanCheck = document.getElementById('global-clean-check');
 const globalGenesisCheck = document.getElementById('global-genesis-check');
 const globalConnectInput = document.getElementById('global-connect-input');
-// Note: We need to use a static NodeList or re-query if dynamic, but these are static in HTML now
 const globalParamChecks = document.querySelectorAll('.global-param-check');
 const globalNetworkRadios = document.querySelectorAll('input[name="global-network-mode"]');
+const syncPeersBtn = document.getElementById('sync-peers-btn');
+const autoSyncPeersCheck = document.getElementById('auto-sync-peers-check');
+const globalConfigStatus = document.getElementById('global-config-status');
+
+function applyNetworkModeState(isMainnet) {
+    if (globalHostCheck) {
+        if (isMainnet) {
+            globalHostCheck.checked = true;
+            globalHostCheck.disabled = true;
+            if (globalHostCheck.parentElement) {
+                globalHostCheck.parentElement.style.opacity = '0.5';
+                globalHostCheck.parentElement.title = "Forced ON for Mainnet (Public Access Required)";
+            }
+        } else {
+            globalHostCheck.disabled = false;
+            if (globalHostCheck.parentElement) {
+                globalHostCheck.parentElement.style.opacity = '1';
+                globalHostCheck.parentElement.title = "Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.";
+            }
+        }
+    }
+}
 
 function updateGlobalTemplate() {
     let script = './scripts/start_node.sh';
@@ -1525,20 +1575,20 @@ function updateGlobalTemplate() {
 
     // Check Network Mode
     let isMainnet = false;
-    globalNetworkRadios.forEach(r => {
-        if (r.checked && r.value === 'mainnet') isMainnet = true;
-    });
+    if (globalNetworkRadios) {
+        globalNetworkRadios.forEach(r => {
+            if (r.checked && r.value === 'mainnet') isMainnet = true;
+        });
+    }
 
     // Auto-switch default values
-    const connectVal = globalConnectInput.value.trim();
+    const connectVal = globalConnectInput ? globalConnectInput.value.trim() : '';
     if (isMainnet && connectVal === '10.0.0.11:9001') {
         globalConnectInput.value = 'megammr.minima.global:9001';
-        // Recurse once to update cmd string with new value
         updateGlobalTemplate();
         return;
     } else if (!isMainnet && connectVal === 'megammr.minima.global:9001') {
         globalConnectInput.value = '10.0.0.11:9001';
-        // Recurse once to update cmd string with new value
         updateGlobalTemplate();
         return;
     }
@@ -1567,40 +1617,330 @@ function updateGlobalTemplate() {
         });
     }
 
-    if (globalCmdTemplateInput) {
+    if (globalCmdTemplateInput && !window._isGlobalTemplateCustom) {
         globalCmdTemplateInput.value = cmd;
     }
 }
 
-// Attach Listeners
+function getGlobalStartConfigFromUI() {
+    const networkModeRadio = document.querySelector('input[name="global-network-mode"]:checked');
+    const networkMode = networkModeRadio ? networkModeRadio.value : 'testnet';
+    const host = globalHostCheck ? globalHostCheck.checked : false;
+    const clean = globalCleanCheck ? globalCleanCheck.checked : true;
+    const genesis = globalGenesisCheck ? globalGenesisCheck.checked : true;
+    const connect = globalConnectInput ? globalConnectInput.value.trim() : '';
+    const autoNameCheck = document.getElementById('auto-name-check');
+    const autoName = autoNameCheck ? autoNameCheck.checked : true;
+    const ramLimitInput = document.getElementById('global-ram-limit');
+    const ramLimit = ramLimitInput ? ramLimitInput.value.trim() : '256m';
+    const cpuLimitInput = document.getElementById('global-cpu-limit');
+    const cpuLimit = cpuLimitInput ? (parseInt(cpuLimitInput.value) || 1) : 1;
+    const autoSyncCheck = document.getElementById('auto-sync-peers-check');
+    const autoSyncPeers = autoSyncCheck ? autoSyncCheck.checked : true;
+
+    const advancedParams = [];
+    if (globalParamChecks) {
+        globalParamChecks.forEach(chk => {
+            if (chk.checked) advancedParams.push(chk.value);
+        });
+    }
+
+    const cmdTemplate = globalCmdTemplateInput ? globalCmdTemplateInput.value.trim() : '';
+
+    return {
+        networkMode,
+        host,
+        clean,
+        genesis,
+        connect,
+        autoName,
+        ramLimit,
+        cpuLimit,
+        autoSyncPeers,
+        advancedParams,
+        cmdTemplate,
+        isTemplateCustom: !!window._isGlobalTemplateCustom,
+        hasApplied: !!window._hasGlobalConfigApplied
+    };
+}
+
+let saveGlobalConfigTimeout = null;
+
+function saveGlobalStartConfig(extra = {}) {
+    if (extra.hasApplied !== undefined) {
+        window._hasGlobalConfigApplied = extra.hasApplied;
+    }
+    if (extra.isTemplateCustom !== undefined) {
+        window._isGlobalTemplateCustom = extra.isTemplateCustom;
+    }
+
+    const currentConfig = getGlobalStartConfigFromUI();
+    if (extra.hasApplied !== undefined) {
+        currentConfig.hasApplied = extra.hasApplied;
+    }
+
+    // 1. Immediately persist to localStorage
+    try {
+        localStorage.setItem(STORAGE_KEY_GLOBAL_START, JSON.stringify(currentConfig));
+        localStorage.setItem('auto-sync-peers', currentConfig.autoSyncPeers);
+    } catch (e) {
+        console.error('Failed to save global start config to localStorage:', e);
+    }
+
+    // 2. Sync to server globalConfig (debounced or immediate)
+    if (saveGlobalConfigTimeout) clearTimeout(saveGlobalConfigTimeout);
+
+    const performServerSync = () => {
+        globalConfig.globalStartConfig = currentConfig;
+        globalConfig.ramLimit = currentConfig.ramLimit;
+        globalConfig.cpuLimit = currentConfig.cpuLimit;
+        socket.emit('update-config', globalConfig, { silent: !extra.notifyServer });
+    };
+
+    if (extra.immediate) {
+        performServerSync();
+    } else {
+        saveGlobalConfigTimeout = setTimeout(performServerSync, 350);
+    }
+}
+
+function applyGlobalStartConfigToUI(config, skipTemplateUpdate = false) {
+    if (!config) return;
+
+    if (config.hasApplied !== undefined) {
+        window._hasGlobalConfigApplied = !!config.hasApplied;
+    }
+    if (config.isTemplateCustom !== undefined) {
+        window._isGlobalTemplateCustom = !!config.isTemplateCustom;
+    }
+
+    // Network Mode
+    const isMainnet = config.networkMode === 'mainnet';
+    const targetRadio = document.querySelector(`input[name="global-network-mode"][value="${isMainnet ? 'mainnet' : 'testnet'}"]`);
+    if (targetRadio) {
+        targetRadio.checked = true;
+    }
+    applyNetworkModeState(isMainnet);
+
+    // Host
+    if (globalHostCheck && !isMainnet && config.host !== undefined) {
+        globalHostCheck.checked = config.host === true;
+    }
+
+    // Clean
+    if (globalCleanCheck && config.clean !== undefined) {
+        globalCleanCheck.checked = config.clean === true;
+    }
+
+    // Genesis
+    if (globalGenesisCheck && config.genesis !== undefined) {
+        globalGenesisCheck.checked = config.genesis === true;
+    }
+
+    // Connect
+    if (globalConnectInput && config.connect !== undefined) {
+        globalConnectInput.value = config.connect;
+    }
+
+    // Auto-name
+    const autoNameCheck = document.getElementById('auto-name-check');
+    if (autoNameCheck && config.autoName !== undefined) {
+        autoNameCheck.checked = config.autoName === true;
+    }
+
+    // RAM Limit
+    const ramLimitInput = document.getElementById('global-ram-limit');
+    if (ramLimitInput && config.ramLimit !== undefined) {
+        ramLimitInput.value = config.ramLimit;
+        globalConfig.ramLimit = config.ramLimit;
+    }
+
+    // CPU Limit
+    const cpuLimitInput = document.getElementById('global-cpu-limit');
+    if (cpuLimitInput && config.cpuLimit !== undefined) {
+        cpuLimitInput.value = config.cpuLimit;
+        globalConfig.cpuLimit = config.cpuLimit;
+    }
+
+    // Auto-sync Peers
+    const autoSyncCheck = document.getElementById('auto-sync-peers-check');
+    if (autoSyncCheck && config.autoSyncPeers !== undefined) {
+        autoSyncCheck.checked = config.autoSyncPeers === true;
+    }
+
+    // Advanced Params
+    if (globalParamChecks && Array.isArray(config.advancedParams)) {
+        globalParamChecks.forEach(chk => {
+            chk.checked = config.advancedParams.includes(chk.value);
+        });
+    }
+
+    // Command Template
+    if (config.cmdTemplate && (config.isTemplateCustom || skipTemplateUpdate)) {
+        if (globalCmdTemplateInput) {
+            globalCmdTemplateInput.value = config.cmdTemplate;
+        }
+    } else if (!skipTemplateUpdate) {
+        updateGlobalTemplate();
+    }
+}
+
+function loadGlobalStartConfig() {
+    let saved = null;
+    try {
+        const local = localStorage.getItem(STORAGE_KEY_GLOBAL_START);
+        if (local) {
+            saved = JSON.parse(local);
+        }
+    } catch (e) {
+        console.error('Failed to parse localStorage global start config:', e);
+    }
+
+    if (!saved && globalConfig && globalConfig.globalStartConfig) {
+        saved = globalConfig.globalStartConfig;
+    }
+
+    if (saved) {
+        applyGlobalStartConfigToUI(saved, true);
+        return saved;
+    } else {
+        // Apply default template if no saved config
+        if (globalCleanCheck) updateGlobalTemplate();
+    }
+    return null;
+}
+
+function applyGlobalConfigToSingleNode(card, i) {
+    if (!card) return;
+    const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
+    const connectInput = card.querySelector('.connect-input');
+    const connectGroup = card.querySelector('.connect-group');
+    const hostCheck = card.querySelector('.host-check');
+    const cleanCheck = card.querySelector('.clean-check');
+    const genesisCheck = card.querySelector('.genesis-check');
+    const previewInput = card.querySelector('.start-cmd-preview');
+
+    if (connectInput && globalConnectInput) {
+        connectInput.value = globalConnectInput.value.trim();
+    }
+
+    if (i === 1 && connectGroup) {
+        connectGroup.style.display = isMainnetMode ? 'flex' : 'none';
+    }
+
+    if (globalHostCheck && hostCheck) {
+        hostCheck.checked = globalHostCheck.checked;
+        if (i === 1 && globalHostCheck.checked && genesisCheck) {
+            genesisCheck.checked = false;
+        }
+    }
+
+    if (globalCleanCheck && cleanCheck) {
+        cleanCheck.checked = globalCleanCheck.checked;
+    }
+
+    if (i === 1 && globalGenesisCheck && genesisCheck) {
+        genesisCheck.checked = !isMainnetMode && globalGenesisCheck.checked;
+    }
+
+    if (globalParamChecks) {
+        const localParamChecks = card.querySelectorAll('.param-check');
+        globalParamChecks.forEach(gChk => {
+            const localChk = Array.from(localParamChecks).find(l => l.value === gChk.value);
+            if (localChk) localChk.checked = gChk.checked;
+        });
+    }
+
+    if (hostCheck) hostCheck.dispatchEvent(new Event('change'));
+
+    const template = globalCmdTemplateInput ? globalCmdTemplateInput.value.trim() : '';
+    if (previewInput && template) {
+        let newCmd = template.replace(/\$ID/g, i);
+        if (i === 1 && !isMainnetMode) {
+            newCmd = newCmd.replace(/\s+-connect\s+\S+/g, '').replace(/\s+-connect\b/g, '');
+        } else if (i > 1) {
+            newCmd = newCmd.replace(/\s+-genesis\b/g, '');
+        }
+        newCmd = newCmd.replace(/\s+/g, ' ').trim();
+        previewInput.value = newCmd;
+    }
+}
+
+function applyGlobalConfigToAllNodes(options = { showFeedback: true }) {
+    const template = globalCmdTemplateInput ? globalCmdTemplateInput.value.trim() : '';
+    if (!template) {
+        if (options.showFeedback) alert('Please enter a command template.');
+        return;
+    }
+
+    for (let i = 1; i <= visibleNodes; i++) {
+        const card = document.getElementById(`node-${i}`);
+        if (card) {
+            applyGlobalConfigToSingleNode(card, i);
+            if (options.showFeedback) {
+                const previewInput = card.querySelector('.start-cmd-preview');
+                if (previewInput) {
+                    previewInput.style.backgroundColor = '#2a2a2a';
+                    setTimeout(() => previewInput.style.backgroundColor = '', 500);
+                }
+            }
+        }
+    }
+
+    if (options.showFeedback) {
+        addToGlobalLog(`[System] Applied global command template to ${visibleNodes} nodes.`);
+    }
+}
+
+// Auto-save on any change inside the Global Config Modal
+const autoSaveGlobal = () => {
+    saveGlobalStartConfig();
+};
+
 // Attach Listeners
 if (globalHostCheck) {
     globalHostCheck.addEventListener('change', () => {
-        // Host Mode is now independent of Genesis/Testnet
+        window._isGlobalTemplateCustom = false;
         updateGlobalTemplate();
+        autoSaveGlobal();
     });
 }
-if (globalCleanCheck) globalCleanCheck.addEventListener('change', updateGlobalTemplate);
-if (globalGenesisCheck) globalGenesisCheck.addEventListener('change', updateGlobalTemplate);
-if (globalConnectInput) globalConnectInput.addEventListener('input', updateGlobalTemplate);
-if (globalParamChecks) globalParamChecks.forEach(chk => chk.addEventListener('change', updateGlobalTemplate));
+if (globalCleanCheck) {
+    globalCleanCheck.addEventListener('change', () => {
+        window._isGlobalTemplateCustom = false;
+        updateGlobalTemplate();
+        autoSaveGlobal();
+    });
+}
+if (globalGenesisCheck) {
+    globalGenesisCheck.addEventListener('change', () => {
+        window._isGlobalTemplateCustom = false;
+        updateGlobalTemplate();
+        autoSaveGlobal();
+    });
+}
+if (globalConnectInput) {
+    globalConnectInput.addEventListener('input', () => {
+        window._isGlobalTemplateCustom = false;
+        updateGlobalTemplate();
+        autoSaveGlobal();
+    });
+}
+if (globalParamChecks) {
+    globalParamChecks.forEach(chk => chk.addEventListener('change', () => {
+        window._isGlobalTemplateCustom = false;
+        updateGlobalTemplate();
+        autoSaveGlobal();
+    }));
+}
 if (globalNetworkRadios) {
     globalNetworkRadios.forEach(r => {
         r.addEventListener('change', () => {
             const isMainnet = r.checked && r.value === 'mainnet';
-            if (isMainnet && globalHostCheck) {
-                // Force Host Mode ON and Lock it
-                globalHostCheck.checked = true;
-                globalHostCheck.disabled = true;
-                globalHostCheck.parentElement.style.opacity = '0.5';
-                globalHostCheck.parentElement.title = "Forced ON for Mainnet (Public Access Required)";
-            } else if (globalHostCheck) {
-                // Unlock Host Mode for Testnet
-                globalHostCheck.disabled = false;
-                globalHostCheck.parentElement.style.opacity = '1';
-                globalHostCheck.parentElement.title = "Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.";
-            }
+            applyNetworkModeState(isMainnet);
+            window._isGlobalTemplateCustom = false;
             updateGlobalTemplate();
+            autoSaveGlobal();
 
             // Update all individual node previews
             for (let i = 1; i <= visibleNodes; i++) {
@@ -1613,13 +1953,29 @@ if (globalNetworkRadios) {
     });
 }
 
-// Initialize Global Template if elements exist
-if (globalCleanCheck) updateGlobalTemplate();
+const autoNameCheck = document.getElementById('auto-name-check');
+if (autoNameCheck) {
+    autoNameCheck.addEventListener('change', autoSaveGlobal);
+}
+const ramLimitGlobalInput = document.getElementById('global-ram-limit');
+if (ramLimitGlobalInput) {
+    ramLimitGlobalInput.addEventListener('input', autoSaveGlobal);
+}
+const cpuLimitGlobalInput = document.getElementById('global-cpu-limit');
+if (cpuLimitGlobalInput) {
+    cpuLimitGlobalInput.addEventListener('input', autoSaveGlobal);
+}
+if (autoSyncPeersCheck) {
+    autoSyncPeersCheck.addEventListener('change', autoSaveGlobal);
+}
+if (globalCmdTemplateInput) {
+    globalCmdTemplateInput.addEventListener('input', () => {
+        window._isGlobalTemplateCustom = true;
+        autoSaveGlobal();
+    });
+}
 
 // Peer Discovery Automation Logic
-const syncPeersBtn = document.getElementById('sync-peers-btn');
-const autoSyncPeersCheck = document.getElementById('auto-sync-peers-check');
-
 if (syncPeersBtn) {
     syncPeersBtn.onclick = () => {
         syncPeersBtn.disabled = true;
@@ -1632,15 +1988,17 @@ if (syncPeersBtn) {
     };
 }
 
-if (autoSyncPeersCheck) {
-    // Load saved state
-    const savedAutoSync = localStorage.getItem('auto-sync-peers');
-    if (savedAutoSync !== null) {
-        autoSyncPeersCheck.checked = (savedAutoSync === 'true');
-    }
-
-    autoSyncPeersCheck.onchange = () => {
-        localStorage.setItem('auto-sync-peers', autoSyncPeersCheck.checked);
+// Save and Apply Buttons
+if (saveGlobalConfigBtn) {
+    saveGlobalConfigBtn.onclick = () => {
+        saveGlobalStartConfig({ immediate: true, notifyServer: true });
+        if (globalConfigStatus) {
+            globalConfigStatus.textContent = '✓ Configuration saved successfully';
+            setTimeout(() => {
+                if (globalConfigStatus) globalConfigStatus.textContent = '';
+            }, 3000);
+        }
+        addToGlobalLog('[Config] Global Start Configuration saved.');
     };
 }
 
@@ -1652,88 +2010,16 @@ if (applyGlobalCmdBtn && globalCmdTemplateInput) {
             return;
         }
 
-        // Confirm removed as per user request
-        const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
+        applyGlobalConfigToAllNodes({ showFeedback: true });
+        saveGlobalStartConfig({ hasApplied: true, immediate: true, notifyServer: true });
 
-        // Iterate all visible nodes
-        for (let i = 1; i <= visibleNodes; i++) {
-            const card = document.getElementById(`node-${i}`);
-            if (card) {
-                // Synchronize Inputs
-                const connectInput = card.querySelector('.connect-input');
-                const connectGroup = card.querySelector('.connect-group');
-
-                if (connectInput && globalConnectInput) {
-                    connectInput.value = globalConnectInput.value.trim();
-                }
-
-                // Node 1 Visibility logic
-                if (i === 1 && connectGroup) {
-                    connectGroup.style.display = isMainnetMode ? 'flex' : 'none';
-                }
-
-                // Sync Host Checkbox
-                if (globalHostCheck) {
-                    const hostCheck = card.querySelector('.host-check');
-                    if (hostCheck && hostCheck.checked !== globalHostCheck.checked) {
-                        hostCheck.checked = globalHostCheck.checked;
-
-                        // Auto-uncheck Genesis for Node 1 if Host is checked
-                        if (i === 1 && globalHostCheck.checked) {
-                            const genesisCheck = card.querySelector('.genesis-check');
-                            if (genesisCheck) genesisCheck.checked = false;
-                        }
-                    }
-                }
-
-                // Sync Advanced Params Flags
-                if (globalParamChecks) {
-                    const localParamChecks = card.querySelectorAll('.param-check');
-                    globalParamChecks.forEach(gChk => {
-                        const localChk = Array.from(localParamChecks).find(l => l.value === gChk.value);
-                        if (localChk) {
-                            localChk.checked = gChk.checked;
-                        }
-                    });
-                }
-
-                // Trigger UI Update & IP/Port refresh
-                const hostCheck = card.querySelector('.host-check');
-                if (hostCheck) hostCheck.dispatchEvent(new Event('change'));
-
-                const previewInput = card.querySelector('.start-cmd-preview');
-                if (previewInput) {
-                    // Replace $ID with actual ID
-                    let newCmd = template.replace(/\$ID/g, i);
-
-                    // Node 1: Remove -connect if present (Legacy Testnet behavior)
-                    // Node > 1: Remove -genesis if present
-                    if (i === 1 && !isMainnetMode) {
-                        // Remove -connect and its argument only if NOT Mainnet
-                        newCmd = newCmd.replace(/\s+-connect\s+\S+/g, '');
-                        newCmd = newCmd.replace(/\s+-connect\b/g, '');
-                    } else if (i > 1) {
-                        // Remove -genesis
-                        newCmd = newCmd.replace(/\s+-genesis\b/g, '');
-                    }
-
-                    // Clean up double spaces
-                    newCmd = newCmd.replace(/\s+/g, ' ').trim();
-
-                    previewInput.value = newCmd;
-
-                    // Visual feedback
-                    previewInput.style.backgroundColor = '#2a2a2a';
-                    setTimeout(() => previewInput.style.backgroundColor = '', 500);
-                }
-            }
-        }
-        addToGlobalLog(`[System] Applied global command template to ${visibleNodes} nodes.`);
-
-        // Close modal after applying for better UX
+        // Close modal after applying
         if (globalConfigModal) globalConfigModal.style.display = 'none';
     };
 }
+
+// Initial restoration of Global Start Configuration
+loadGlobalStartConfig();
 // ADB Device Management
 socket.on('adb-device-list', (devices) => {
     document.querySelectorAll('.adb-device-select').forEach(select => {

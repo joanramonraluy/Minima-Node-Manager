@@ -608,8 +608,11 @@
                 <input type="text" id="global-cmd-template"
                     value="./scripts/start_node.sh $ID -clean -genesis -mdsenable -test -rpcenable -rpcssl -rpccrlf -allowallip -showparams -mdspassword 123"
                     class="command-input" style="width: 100%; margin-bottom: 10px;">
-                <button id="apply-global-cmd-btn" class="btn btn-secondary" style="width: 100%;">Apply to All
-                    Nodes</button>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="save-global-config-btn" class="btn btn-primary" style="flex: 1;">Save Configuration</button>
+                    <button id="apply-global-cmd-btn" class="btn btn-secondary" style="flex: 1;">Apply to All Nodes</button>
+                </div>
+                <div id="global-config-status" style="font-size: 0.85rem; color: #40c057; margin-top: 8px; text-align: center; min-height: 1.2em;"></div>
             </div>
         </div>
     </div>

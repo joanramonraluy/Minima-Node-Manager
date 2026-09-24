@@ -9,5 +9,29 @@
   "adbPushRemotePath": "/sdcard/Download/",
   "mobilePackageName": "",
   "ramLimit": "256m",
-  "cpuLimit": 1
+  "cpuLimit": 1,
+  "globalStartConfig": {
+    "networkMode": "testnet",
+    "host": false,
+    "clean": false,
+    "genesis": false,
+    "connect": "10.0.0.11:9001",
+    "autoName": true,
+    "ramLimit": "256m",
+    "cpuLimit": 1,
+    "autoSyncPeers": true,
+    "advancedParams": [
+      "-mdsenable",
+      "-test",
+      "-rpcenable",
+      "-rpcssl",
+      "-rpccrlf",
+      "-allowallip",
+      "-showparams",
+      "-mdspassword 123"
+    ],
+    "cmdTemplate": "./scripts/start_node.sh $ID -connect 10.0.0.11:9001 -mdsenable -test -rpcenable -rpcssl -rpccrlf -allowallip -showparams -mdspassword 123",
+    "isTemplateCustom": false,
+    "hasApplied": true
+  }
 }

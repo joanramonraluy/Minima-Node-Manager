@@ -62,7 +62,8 @@ let globalConfig = {
     adbPushRemotePath: '/sdcard/Download/',
     mobilePackageName: 'com.minima.android',
     ramLimit: '256m',
-    cpuLimit: 1
+    cpuLimit: 1,
+    globalStartConfig: null
 };
 
 // Load Config from File
@@ -162,7 +163,17 @@ function startNode(id, options = {}) {
         const parts = options.command.trim().split(/\s+/);
         cmd = parts[0];
         args = parts.slice(1);
-        fullCommandStr = options.command;
+
+        // Add RAM limit if configured and not already present
+        if (globalConfig.ramLimit && !args.includes('-ram')) {
+            args.push('-ram', globalConfig.ramLimit);
+        }
+        // Add CPU limit if configured and not present
+        if (globalConfig.cpuLimit && !args.includes('-cpus')) {
+            args.push('-cpus', String(globalConfig.cpuLimit));
+        }
+
+        fullCommandStr = `${cmd} ${args.join(' ')}`;
     } else {
         // Construct arguments from options
         const { clean, genesis, connect, advancedParams } = options;
@@ -420,17 +431,26 @@ io.on('connection', (socket) => {
     // --- .env Export & Vite Features ---
 
     // Config Update Handler
-    socket.on('update-config', (newConfig) => {
+    socket.on('update-config', (newConfig, options = {}) => {
         // Log incoming update
         console.log('[Config] Incoming update from client:', JSON.stringify(newConfig));
 
+        const adbChanged = newConfig.adbPath && newConfig.adbPath !== globalConfig.adbPath;
         // Deep merge or at least ensure new keys are preserved
         globalConfig = { ...globalConfig, ...newConfig };
 
         saveConfig();
         // Broadcast the update back to all clients so they stay in sync
         io.emit('config-update', globalConfig);
-        io.emit('global-log', `[Server] Config updated & saved: ADB Path = ${globalConfig.adbPath}`);
+        if (!options.silent) {
+            if (adbChanged) {
+                io.emit('global-log', `[Server] Config updated & saved: ADB Path = ${globalConfig.adbPath}`);
+            } else if (newConfig.globalStartConfig) {
+                io.emit('global-log', `[Server] Global Start Configuration saved.`);
+            } else {
+                io.emit('global-log', `[Server] Configuration updated & saved.`);
+            }
+        }
     });
 
     socket.on('export-env', async (data) => {
