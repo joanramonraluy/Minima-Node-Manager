@@ -168,7 +168,9 @@ Besides the default **Classic / MDS** mode, the manager has a global **Core** mo
 `config.json` keys used by Core:
 - `coreJarPath` (**required**, empty by default): absolute path to the Core `minima.jar` (Main-Class `org.minima.Minima`), for example the one in the `app/libs/` folder of a checkout of `minima-core-android`
 - `coreLibsPath` (**required**, empty by default): absolute path to a directory with `bcprov`, `bcpkix`, `bcutil` and `h2` jars (the Core jar does not bundle them; only those four are put on the classpath), for example the `lib/` folder of a Minima Classic source checkout
-- If either is empty, starting a node in Core mode only logs a message and starts nothing.
+- If either is empty, the server looks for them at startup: the `CORE_JAR` / `CORE_LIBS` environment variables, `./core/minima.jar` and `./core/lib/`, and a sibling `../MinimaAds/refs/` checkout (`minima-core-android-main/app/libs/minima.jar`, `Minima-1.0.45/lib/`). Detected values are used for the running server only; nothing is written to `config.json`. If nothing is found, starting a node in Core mode only logs a message and starts nothing.
+
+`config.json` is **local and not versioned** (the UI rewrites it: mode, paths, ADB settings). Copy `config.example.json` to `config.json` to start from a clean one; without a `config.json` the built-in defaults apply.
 - `coreDbPassword`: value for `-dbpassword` (required on first start)
 
 What changes in Core mode:

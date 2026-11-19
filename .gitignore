@@ -14,3 +14,6 @@ nodes/
 
 #core nodes data
 nodes-core/
+
+# Local settings (written by the UI; paths and mode are per machine). Copy config.example.json to start.
+config.json

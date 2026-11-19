@@ -87,6 +87,31 @@ if (fs.existsSync(CONFIG_FILE)) {
     }
 }
 
+// Core mode paths: when config.json leaves them empty, look for them next to this checkout
+// (a sibling MinimaAds checkout with its refs/ folder, or ./core/) and in the CORE_JAR / CORE_LIBS
+// environment variables. Nothing is written to config.json: this only fills the running config.
+function autoDetectCorePaths() {
+    const first = (cands, test) => cands.filter(Boolean).find(c => { try { return test(c); } catch (e) { return false; } }) || '';
+    const refs = path.join(__dirname, '..', 'MinimaAds', 'refs');
+    if (!globalConfig.coreJarPath) {
+        globalConfig.coreJarPath = first([
+            process.env.CORE_JAR,
+            path.join(__dirname, 'core', 'minima.jar'),
+            path.join(refs, 'minima-core-android-main', 'app', 'libs', 'minima.jar')
+        ], c => fs.statSync(c).isFile());
+        if (globalConfig.coreJarPath) console.log('[Config] Core jar auto-detected:', globalConfig.coreJarPath);
+    }
+    if (!globalConfig.coreLibsPath) {
+        globalConfig.coreLibsPath = first([
+            process.env.CORE_LIBS,
+            path.join(__dirname, 'core', 'lib'),
+            path.join(refs, 'Minima-1.0.45', 'lib')
+        ], c => fs.statSync(c).isDirectory() && fs.readdirSync(c).some(f => /^h2.*\.jar$/.test(f)));
+        if (globalConfig.coreLibsPath) console.log('[Config] Core libs auto-detected:', globalConfig.coreLibsPath);
+    }
+}
+autoDetectCorePaths();
+
 function saveConfig() {
     try {
         const data = JSON.stringify(globalConfig, null, 2);

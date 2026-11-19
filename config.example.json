@@ -1,0 +1,9 @@
+{
+  "mode": "classic",
+  "coreJarPath": "",
+  "coreLibsPath": "",
+  "coreDbPassword": "minima",
+  "adbPath": "adb",
+  "ramLimit": "256m",
+  "cpuLimit": 1
+}
