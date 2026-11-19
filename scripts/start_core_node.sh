@@ -98,5 +98,6 @@ exec ip netns exec $NS java $xmx_flag $cpu_flag -cp "$CP" org.minima.Minima \
   -dbpassword "$DBPASS" \
   -port $PORT \
   -host ${IP%/*} \
+  -rpccrlf \
   $clean_flag \
   $role_flags | tee "$DATA_NAME/startup.log"
