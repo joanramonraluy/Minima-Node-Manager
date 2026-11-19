@@ -81,6 +81,24 @@ const router = require('../lib/emulator')({
     let spec = state.spawned[0].join(' '); assert.ok(/-avd Stopped_AVD -gpu host -snapshot day1$/.test(spec), spec); ok('launch -snapshot day1 with -gpu host');
     r = await post('/launch', { avd: 'Stopped_AVD' }); assert.equal(r.j.status, 'already starting'); assert.equal(state.spawned.length, 1); ok('launching protection');
 
+    // Open All: skips running AVDs, launches only the stopped one(s) (Stopped_AVD is already 'starting' here)
+    r = await post('/launch-all', {}); assert.equal(r.s, 200);
+    assert.deepEqual(r.j.avds.map(a => [a.name, a.plan]), [['Run_AVD', 'already running'], ['Stopped_AVD', 'already starting']]);
+    await router._launchAllDone; assert.equal(state.spawned.length, 1); ok('launch-all: running/starting skipped, nothing spawned');
+    // simulate the stopped AVD no longer starting (exit handler) by using a fresh router state
+    const router2 = require('../lib/emulator')({
+        getConfig: () => ({ ...cfg, emulatorLaunchPauseMs: 0 }), getAdbEnv: () => process.env, log: m => logs.push(m), run, avdRoot: () => avdRoot,
+        spawnProc: (cmd, args) => { state.spawned.push([cmd, ...args]); return { pid: process.pid, on() { }, unref() { } }; }
+    });
+    const app2 = express(); app2.use('/api/emulator', router2); const srv2 = app2.listen(0);
+    const r2 = await fetch(`http://127.0.0.1:${srv2.address().port}/api/emulator/launch-all`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json());
+    assert.deepEqual(r2.avds.map(a => [a.name, a.plan]), [['Run_AVD', 'already running'], ['Stopped_AVD', 'launch']]);
+    await router2._launchAllDone;
+    assert.equal(state.spawned.length, 2);
+    assert.ok(/-avd Stopped_AVD -gpu host$/.test(state.spawned[1].join(' '))); assert.ok(!state.spawned[1].some(x => x.startsWith('-snapshot') || x === '-no-snapshot-load'));
+    assert.ok(!state.spawned.some(c => c.includes('Run_AVD'))); ok('launch-all launches only the stopped AVD, quickboot, -gpu host');
+    srv2.close();
+
     // stop with save-first (order: save then kill)
     state.calls.length = 0;
     r = await post('/stop', { avd: 'Run_AVD', saveAs: 'endofday' }); assert.equal(r.s, 200);

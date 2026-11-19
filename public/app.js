@@ -568,6 +568,17 @@ if (clearAllLogsBtn) {
 }
 
 document.getElementById('open-all-btn').onclick = () => {
+    // Core nodes have no web UI: "Open All" opens the Android emulators instead
+    if (window.nodeMode === 'core') {
+        fetch('/api/emulator/launch-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(r => r.json()).then(j => {
+                if (j.error) { addToGlobalLog(`[Emulator] ${j.error}`); return; }
+                const todo = j.avds.filter(a => a.plan === 'launch').length;
+                addToGlobalLog(`[Emulator] Open All: ${todo} to launch, ${j.avds.length - todo} already running/starting (progress below).`);
+                setTimeout(refreshAndroidDevices, 4000);
+            }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
+        return;
+    }
     let opened = 0;
     // Determine loop range
     for (let i = 1; i <= visibleNodes; i++) {
@@ -628,6 +639,11 @@ function applyNodeMode(mode) {
     const changed = window.nodeMode !== m;
     window.nodeMode = m;
     document.body.dataset.mode = m;
+    const openAllBtn = document.getElementById('open-all-btn');
+    if (openAllBtn) {
+        openAllBtn.textContent = m === 'core' ? 'Open All Emulators' : 'Open All';
+        openAllBtn.title = m === 'core' ? 'Open all Android emulators (AVDs) that are not running yet' : 'Open the web UI of every running node';
+    }
     const sel = document.getElementById('mode-select');
     if (sel) sel.value = m;
     if (changed) {
