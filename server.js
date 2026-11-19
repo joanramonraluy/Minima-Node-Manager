@@ -1615,13 +1615,15 @@ function sendMinimaRpc(id, command, callback) {
         port: rpcPort,
         path: '/' + encodeURIComponent(command),
         method: 'GET',
-        rejectUnauthorized: false,
         headers: {
             'Authorization': 'Basic ' + Buffer.from('minima:123').toString('base64')
         }
     };
+    // Core's RPC is plain HTTP only; Classic uses HTTPS (self-signed)
+    const useHttp = isCoreMode();
+    if (!useHttp) rpcOptions.rejectUnauthorized = false;
 
-    const req = https.request(rpcOptions, (res) => {
+    const req = (useHttp ? http : https).request(rpcOptions, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
         res.on('end', () => {
@@ -1649,7 +1651,7 @@ function scheduleCoreRpcEnable(id, child) {
         io.emit('log-update', { id, type: 'system', content: t });
         addLogToBuffer(id, 'system', t);
     };
-    note(`[Core] Waiting for node to be ready to enable RPC (rpc enable:true ssl:true password:123)...\n`);
+    note(`[Core] Waiting for node to be ready to enable RPC (rpc enable:true password:123)...\n`);
     let attempts = 0;
     let sent = 0;
     const poller = setInterval(() => {
@@ -1671,8 +1673,8 @@ function scheduleCoreRpcEnable(id, child) {
             // Not answering: after ~9s, (re)send the enable command every ~9s (max 5 times)
             if (!poller._done && attempts >= 3 && attempts % 3 === 0 && sent < 5 && nodeProcesses[id] === child) {
                 sent++;
-                child.stdin.write('rpc enable:true ssl:true password:123\n');
-                note(`> rpc enable:true ssl:true password:123 (attempt ${sent})\n`);
+                child.stdin.write('rpc enable:true password:123\n');
+                note(`> rpc enable:true password:123 (attempt ${sent})\n`);
             }
         });
     }, 3000);
