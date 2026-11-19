@@ -1,4 +1,9 @@
 const socket = io();
+// Global node mode: 'classic' (MDS) or 'core' (Minima Core 1.1). Persisted server-side in config.json.
+window.nodeMode = 'classic';
+function defaultMobilePackage() {
+    return window.nodeMode === 'core' ? 'org.minima.core' : 'com.minima.android';
+}
 const MAX_NODES = 26;
 let visibleNodes = 0;
 
@@ -253,7 +258,22 @@ function addNode() {
     const startCmdPreview = card.querySelector('.start-cmd-preview');
     const paramChecks = card.querySelectorAll('.param-check');
 
+    const coreCleanCheck = card.querySelector('.core-clean-check');
+    const coreRole = card.querySelector('.core-role');
+
     function updateCommandPreview() {
+        if (window.nodeMode === 'core') {
+            let ccmd = `./scripts/start_core_node.sh ${i}`;
+            if (coreCleanCheck && coreCleanCheck.checked) ccmd += ' -clean';
+            startCmdPreview.value = ccmd;
+            if (coreRole) coreRole.textContent = i === 1 ? '-solo (creates genesis)' : '-test -nop2p -connect 10.0.0.11:9001';
+            card.querySelector('.ip-port').innerHTML = `10.0.0.${10 + i}:<span class="port-number">9001</span> (RPC 9005)`;
+            const coreTitle = card.querySelector('.node-header h2');
+            coreTitle.title = '';
+            coreTitle.onclick = null;
+            return;
+        }
+
         // If user manually edited, we might want to respect that?
         // For now, let's keep it simple: any checkbox change regenerates the command.
 
@@ -331,6 +351,7 @@ function addNode() {
     genesisCheck.addEventListener('change', updateCommandPreview);
     connectInput.addEventListener('input', updateCommandPreview);
     paramChecks.forEach(chk => chk.addEventListener('change', updateCommandPreview));
+    if (coreCleanCheck) coreCleanCheck.addEventListener('change', updateCommandPreview);
 
     // Initialize Preview
     card.updatePreview = updateCommandPreview;
@@ -596,13 +617,42 @@ let globalConfig = {
     adbPushPath: '',
     adbPushRemotePath: '/sdcard/Download/',
     mobilePackageName: 'com.minima.android',
+    mode: 'classic',
     ramLimit: '256m',
     cpuLimit: 1
 };
 
 // Listen for Config from Server
+function applyNodeMode(mode) {
+    const m = mode === 'core' ? 'core' : 'classic';
+    const changed = window.nodeMode !== m;
+    window.nodeMode = m;
+    document.body.dataset.mode = m;
+    const sel = document.getElementById('mode-select');
+    if (sel) sel.value = m;
+    if (changed) {
+        // Regenerate every node card's command preview for the new mode
+        document.querySelectorAll('.node-card').forEach(c => { if (c.updatePreview) c.updatePreview(); });
+        // Leave a tab that is hidden in this mode
+        const shown = document.querySelector('.tab-content.show');
+        if (shown && getComputedStyle(shown).display === 'none') {
+            const nodesBtn = document.querySelector('.topbar-link');
+            if (nodesBtn) nodesBtn.click();
+        }
+    }
+}
+
+const modeSelectEl = document.getElementById('mode-select');
+if (modeSelectEl) {
+    modeSelectEl.addEventListener('change', () => {
+        // Server persists it and echoes config-update (it reverts the selector if nodes are running)
+        socket.emit('update-config', { ...globalConfig, mode: modeSelectEl.value });
+    });
+}
+
 socket.on('config-update', (config) => {
     globalConfig = { ...globalConfig, ...config };
+    applyNodeMode(globalConfig.mode);
 
     // Update UI Inputs
     if (configProjectPathInput) configProjectPathInput.value = globalConfig.projectPath;
@@ -612,8 +662,8 @@ socket.on('config-update', (config) => {
 
     const configMobilePkgInput = document.getElementById('config-mobile-package-name');
     const apkPackageNameInput = document.getElementById('apk-package-name-input');
-    if (configMobilePkgInput) configMobilePkgInput.value = config.mobilePackageName || 'com.minima.android';
-    if (apkPackageNameInput) apkPackageNameInput.value = config.mobilePackageName || 'com.minima.android';
+    if (configMobilePkgInput) configMobilePkgInput.value = config.mobilePackageName || defaultMobilePackage();
+    if (apkPackageNameInput) apkPackageNameInput.value = config.mobilePackageName || defaultMobilePackage();
 
     const ramLimitInput = document.getElementById('global-ram-limit');
     if (ramLimitInput) ramLimitInput.value = globalConfig.ramLimit || '256m';
@@ -668,9 +718,9 @@ saveConfigBtn.onclick = () => {
     const configMobilePkgInput = document.getElementById('config-mobile-package-name');
     const apkPackageNameInput = document.getElementById('apk-package-name-input');
     if (configMobilePkgInput) {
-        globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || 'com.minima.android';
+        globalConfig.mobilePackageName = configMobilePkgInput.value.trim() || defaultMobilePackage();
     } else if (apkPackageNameInput) {
-        globalConfig.mobilePackageName = apkPackageNameInput.value.trim() || 'com.minima.android';
+        globalConfig.mobilePackageName = apkPackageNameInput.value.trim() || defaultMobilePackage();
     }
 
     const ramLimitInput = document.getElementById('global-ram-limit');
@@ -1812,6 +1862,11 @@ function loadGlobalStartConfig() {
 
 function applyGlobalConfigToSingleNode(card, i) {
     if (!card) return;
+    // Core mode: the Classic global template does not apply
+    if (window.nodeMode === 'core') {
+        if (card.updatePreview) card.updatePreview();
+        return;
+    }
     const isMainnetMode = document.querySelector('input[name="global-network-mode"]:checked')?.value === 'mainnet';
     const connectInput = card.querySelector('.connect-input');
     const connectGroup = card.querySelector('.connect-group');

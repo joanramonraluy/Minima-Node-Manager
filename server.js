@@ -63,7 +63,14 @@ let globalConfig = {
     mobilePackageName: 'com.minima.android',
     ramLimit: '256m',
     cpuLimit: 1,
-    globalStartConfig: null
+    globalStartConfig: null,
+    // Global node mode: 'classic' (MDS, minima.jar -jar) or 'core' (Minima Core 1.1.x, org.minima.Minima)
+    mode: 'classic',
+    // Core mode needs these two paths in config.json (no machine-specific defaults): the Core minima.jar
+    // and a directory with the bcprov/bcpkix/bcutil/h2 jars. See README, "Core mode".
+    coreJarPath: '',
+    coreLibsPath: '',
+    coreDbPassword: 'minima'
 };
 
 // Load Config from File
@@ -156,8 +163,27 @@ function startNode(id, options = {}) {
     let cmd = './scripts/start_node.sh';
     let args = [];
     let fullCommandStr = '';
+    const coreMode = isCoreMode();
 
-    if (options.command) {
+    if (coreMode) {
+        if (!globalConfig.coreJarPath || !globalConfig.coreLibsPath) {
+            const msg = `[Core] coreJarPath and coreLibsPath are not set in config.json (see README, "Core mode"); node ${id} not started.\n`;
+            io.emit('log-update', { id, type: 'system', content: msg });
+            addLogToBuffer(id, 'system', msg);
+            delete nodeTypes[id];
+            return;
+        }
+        // Core mode: the UI preview only contributes -clean; everything else is built here/in the script.
+        nodeTypes[id] = 'virtual';
+        cmd = './scripts/start_core_node.sh';
+        const raw = options.command ? options.command.trim().split(/\s+/) : [];
+        const wantsClean = options.clean === true || raw.includes('-clean');
+        args.push(String(id));
+        if (wantsClean) args.push('-clean');
+        if (globalConfig.ramLimit) args.push('-ram', globalConfig.ramLimit);
+        if (globalConfig.cpuLimit) args.push('-cpus', String(globalConfig.cpuLimit));
+        fullCommandStr = `${cmd} ${args.join(' ')}`;
+    } else if (options.command) {
         // Use the provided command string
         // Simple splitting by space (doesn't handle quoted arguments with spaces)
         const parts = options.command.trim().split(/\s+/);
@@ -218,8 +244,17 @@ function startNode(id, options = {}) {
     addLogToBuffer(id, 'system', execMsg);
 
     // Spawn without 'sudo' prefix since server is already root
-    const child = spawn(cmd, args);
+    const spawnOpts = coreMode ? {
+        env: {
+            ...process.env,
+            CORE_JAR: globalConfig.coreJarPath,
+            CORE_LIBS: globalConfig.coreLibsPath,
+            CORE_DBPASSWORD: globalConfig.coreDbPassword
+        }
+    } : undefined;
+    const child = spawnOpts ? spawn(cmd, args, spawnOpts) : spawn(cmd, args);
     nodeProcesses[id] = child;
+    if (coreMode) scheduleCoreRpcEnable(id, child);
 
     // Stream Output to Socket.io and Ring-Buffer
     child.stdout.on('data', (data) => {
@@ -246,7 +281,7 @@ function startNode(id, options = {}) {
     io.emit('log-update', { id, type: 'system', content: startedMsg });
     addLogToBuffer(id, 'system', startedMsg);
 
-    if (options.autoName) {
+    if (options.autoName && !coreMode) {
         scheduleAutoName(id);
     }
 }
@@ -257,7 +292,8 @@ function stopNode(id) {
     // If we don't know the type, we default to 'virtual' as it's the most common
     // but a thorough 'Stop All' might want to try both if the server was restarted.
     const type = nodeTypes[id] || 'virtual';
-    const script = type === 'host' ? './scripts/stop_host_node.sh' : './scripts/stop_node.sh';
+    let script = type === 'host' ? './scripts/stop_host_node.sh' : './scripts/stop_node.sh';
+    if (isCoreMode()) script = './scripts/stop_core_node.sh';
 
     const stopScript = spawn(script, [id]);
 
@@ -327,7 +363,7 @@ io.on('connection', (socket) => {
 
     // Handle Kill All (Force)
     socket.on('kill-all', () => {
-        const kill = spawn('./scripts/kill_all_nodes.sh');
+        const kill = spawn(isCoreMode() ? './scripts/kill_all_core_nodes.sh' : './scripts/kill_all_nodes.sh');
         kill.stdout.on('data', d => io.emit('global-log', d.toString()));
         // Force clear internal state
         Object.keys(nodeProcesses).forEach(id => delete nodeProcesses[id]);
@@ -360,7 +396,7 @@ io.on('connection', (socket) => {
         stopNode(id);
 
         setTimeout(() => {
-            const proc = spawn('./scripts/delete_node_data.sh', [id]);
+            const proc = spawn(isCoreMode() ? './scripts/delete_core_node_data.sh' : './scripts/delete_node_data.sh', [id]);
             proc.stdout.on('data', d => io.emit('log-update', { id, type: 'system', content: d.toString() }));
             proc.on('close', () => {
                 io.emit('log-update', { id, type: 'system', content: `[System] Node ${id} data deletion complete.\n` });
@@ -373,7 +409,7 @@ io.on('connection', (socket) => {
         io.emit('global-log', '[System] TERMINATING ALL NODES AND WIPING ALL DATA...\n');
         stopAll();
         setTimeout(() => {
-            const proc = spawn('./scripts/delete_node_data.sh', ['all']);
+            const proc = spawn(isCoreMode() ? './scripts/delete_core_node_data.sh' : './scripts/delete_node_data.sh', ['all']);
             proc.stdout.on('data', d => io.emit('global-log', d.toString()));
             proc.on('close', () => {
                 io.emit('global-log', '[System] GLOBAL DATA WIPE COMPLETE.\n');
@@ -436,6 +472,26 @@ io.on('connection', (socket) => {
         console.log('[Config] Incoming update from client:', JSON.stringify(newConfig));
 
         const adbChanged = newConfig.adbPath && newConfig.adbPath !== globalConfig.adbPath;
+        // Mode switch is refused while nodes are running (Classic and Core are never mixed)
+        if (newConfig.mode !== undefined) {
+            if (!['classic', 'core'].includes(newConfig.mode)) {
+                newConfig = { ...newConfig, mode: globalConfig.mode };
+            } else if (newConfig.mode !== globalConfig.mode) {
+                if (Object.keys(nodeProcesses).length > 0) {
+                    io.emit('global-log', `[Server] Cannot switch mode while nodes are running. Stop all nodes first.`);
+                    newConfig = { ...newConfig, mode: globalConfig.mode };
+                } else {
+                    io.emit('global-log', `[Server] Mode switched to ${newConfig.mode.toUpperCase()}.`);
+                    // ADB default package follows the mode (only if still on the other mode's default)
+                    const pkgNow = newConfig.mobilePackageName || globalConfig.mobilePackageName;
+                    if (newConfig.mode === 'core' && (!pkgNow || pkgNow === 'com.minima.android')) {
+                        newConfig = { ...newConfig, mobilePackageName: 'org.minima.core' };
+                    } else if (newConfig.mode === 'classic' && (!pkgNow || pkgNow === 'org.minima.core')) {
+                        newConfig = { ...newConfig, mobilePackageName: 'com.minima.android' };
+                    }
+                }
+            }
+        }
         // Deep merge or at least ensure new keys are preserved
         globalConfig = { ...globalConfig, ...newConfig };
 
@@ -1580,6 +1636,47 @@ function sendMinimaRpc(id, command, callback) {
 
     req.on('error', (e) => callback(e));
     req.end();
+}
+
+function isCoreMode() {
+    return globalConfig.mode === 'core';
+}
+
+// Core has no RPC enabled by default: once the node is up, send `rpc enable` on stdin,
+// retrying (short timer) until sendMinimaRpc gets an answer.
+function scheduleCoreRpcEnable(id, child) {
+    const note = (t) => {
+        io.emit('log-update', { id, type: 'system', content: t });
+        addLogToBuffer(id, 'system', t);
+    };
+    note(`[Core] Waiting for node to be ready to enable RPC (rpc enable:true ssl:true password:123)...\n`);
+    let attempts = 0;
+    let sent = 0;
+    const poller = setInterval(() => {
+        attempts++;
+        if (nodeProcesses[id] !== child || attempts > 60) {
+            clearInterval(poller);
+            if (nodeProcesses[id] === child) note(`[Core] Gave up waiting for RPC.\n`);
+            return;
+        }
+        sendMinimaRpc(id, 'status', (err, json) => {
+            if (!err && json && json.status !== undefined) {
+                if (!poller._done) {
+                    poller._done = true;
+                    clearInterval(poller);
+                    note(`[Core] RPC is up on 10.0.0.${10 + parseInt(id)}:9005.\n`);
+                }
+                return;
+            }
+            // Not answering: after ~9s, (re)send the enable command every ~9s (max 5 times)
+            if (!poller._done && attempts >= 3 && attempts % 3 === 0 && sent < 5 && nodeProcesses[id] === child) {
+                sent++;
+                child.stdin.write('rpc enable:true ssl:true password:123\n');
+                note(`> rpc enable:true ssl:true password:123 (attempt ${sent})\n`);
+            }
+        });
+    }, 3000);
+    child.on('close', () => clearInterval(poller));
 }
 
 function scheduleAutoName(id) {

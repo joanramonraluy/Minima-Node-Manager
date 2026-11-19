@@ -161,6 +161,31 @@ curl -X POST http://localhost:3000/api/nodes/1/rpc \
   -d '{"command":"status"}'
 ```
 
+## Core mode (Minima Core 1.1.x)
+
+Besides the default **Classic / MDS** mode, the manager has a global **Core** mode, chosen with the selector in the header (`mode` in `config.json`: `"classic"` | `"core"`). The choice is persisted and restored on the next launch. The mode cannot be switched while nodes are running, and Classic and Core nodes are never mixed in the same harness (Core data lives in `nodes-core/`, Classic data in `nodes/`).
+
+`config.json` keys used by Core:
+- `coreJarPath` (**required**, empty by default): absolute path to the Core `minima.jar` (Main-Class `org.minima.Minima`), for example the one in the `app/libs/` folder of a checkout of `minima-core-android`
+- `coreLibsPath` (**required**, empty by default): absolute path to a directory with `bcprov`, `bcpkix`, `bcutil` and `h2` jars (the Core jar does not bundle them; only those four are put on the classpath), for example the `lib/` folder of a Minima Classic source checkout
+- If either is empty, starting a node in Core mode only logs a message and starts nothing.
+- `coreDbPassword`: value for `-dbpassword` (required on first start)
+
+What changes in Core mode:
+- Nodes are started by `scripts/start_core_node.sh` (same namespaces / IPs `10.0.0.1N`, port 9001) with `java -cp <jar>:<libs> org.minima.Minima -data nodes-core/nodeN -dbpassword ... -port 9001 -host <ip>`. Node 1 uses `-solo` (private chain, creates genesis); the others use `-test -nop2p -connect 10.0.0.11:9001`. The per-node *Clean* checkbox adds `-clean`.
+- Core has no RPC by default: once the process is running the manager sends `rpc enable:true ssl:true password:123` over stdin (retrying until `status` answers), so RPC is on `10.0.0.1N:9005` (port + 4, user `minima`, password `123`). **The RPC listens on all interfaces with write access: this is a test harness, do not use it outside an isolated machine.**
+- Core has no MDS or Maxima: the dApp install/uninstall panel, the Build Pipeline and Vite tabs, host-network mode, genesis/connect/advanced MDS flags, auto Maxima name and peer sync are hidden. Node logs, the per-node command console and the ADB section remain.
+- ADB: the default package name becomes `org.minima.core` (switching mode swaps it if it was still the other mode's default). Commands to a phone are not implemented (Core on Android only exposes IPC `minimaapi`, not RPC).
+- Core mode uses `stop_core_node.sh`, `kill_all_core_nodes.sh` and `delete_core_node_data.sh`; none of them touches `nodes/`.
+
+Not verified: Core and Classic nodes talking to each other; `-solo` only on node 1 with more than 2 nodes.
+
+### Testing Core mode with 2 nodes
+1. `sudo nodemanager` (or `sudo node server.js`), open http://localhost:3000 and pick **Core 1.1** in the header. Set Nodes = 2.
+2. Start Node 1 and wait for `[Core] RPC is up on 10.0.0.11:9005` in its log, then Start Node 2.
+3. In each node's command box run `status`: both must report the same block. Or through the proxy: `curl -X POST http://localhost:3000/api/nodes/1/rpc -H 'Content-Type: application/json' -d '{"command":"status"}'` (same with `/2/`).
+4. On node 2 run `getaddress` and copy the address; on node 1 run `send address:<ADDR> amount:10`. After a block, `balance` on node 2 shows 10.
+
 ## Architecture
 
 ### Network Setup
@@ -183,7 +208,8 @@ MinimaNodeManager/
 │   └── logo.jpeg          # Minima logo
 ├── scripts/               # Shell scripts for node management
 │   ├── setup_network.sh   # Network namespace setup
-│   ├── start_node.sh      # Start individual node
+│   ├── start_node.sh      # Start individual node (Classic)
+│   ├── start_core_node.sh # Start individual node (Core mode)
 │   ├── stop_node.sh       # Stop individual node
 │   ├── disconnect_node.sh # Disconnect node from network
 │   └── reconnect_node.sh  # Reconnect node to network

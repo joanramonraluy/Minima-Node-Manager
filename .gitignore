@@ -11,3 +11,6 @@ nodes/
 *.db
 *.mv.db
 *.log
+
+#core nodes data
+nodes-core/

@@ -1004,3 +1004,8 @@ input[type=number] {
 .btn-blue:hover {
     background-color: #0056b3;
 }
+/* Node mode (Classic / Core) visibility */
+.core-only { display: none; }
+body[data-mode="core"] .classic-only { display: none !important; }
+body[data-mode="core"] .core-only { display: block; }
+body[data-mode="core"] .control-group.core-only { display: flex; align-items: center; }

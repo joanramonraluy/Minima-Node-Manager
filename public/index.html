@@ -9,13 +9,18 @@
     <link rel="icon" href="favicon.png">
 </head>
 
-<body>
+<body data-mode="classic">
     <div class="app-container">
         <!-- Horizontal Top Navigation -->
         <header class="topbar">
             <div class="topbar-header">
                 <img src="logo.jpeg" alt="Minima Logo" class="logo" onerror="this.style.display='none'">
                 <h1>Node Manager</h1>
+                <select id="mode-select" class="command-input" title="Node mode (persisted). Switch only with all nodes stopped."
+                    style="margin-left: 15px; width: auto; padding: 4px 8px; font-weight: bold;">
+                    <option value="classic">Classic / MDS</option>
+                    <option value="core">Core 1.1</option>
+                </select>
             </div>
 
             <nav class="topbar-nav">
@@ -25,10 +30,10 @@
                 <button class="topbar-link" onclick="openTab(event, 'tab-dapps')">
                     <span class="icon">📦</span> dApp Manager
                 </button>
-                <button class="topbar-link" onclick="openTab(event, 'tab-build')">
+                <button class="topbar-link classic-only" onclick="openTab(event, 'tab-build')">
                     <span class="icon">🛠️</span> Build Pipeline
                 </button>
-                <button class="topbar-link" onclick="openTab(event, 'tab-vite')">
+                <button class="topbar-link classic-only" onclick="openTab(event, 'tab-vite')">
                     <span class="icon">⚡</span> Vite Server
                 </button>
             </nav>
@@ -82,7 +87,7 @@
             </div>
 
             <!-- Tab Content: Vite -->
-            <div id="tab-vite" class="tab-content">
+            <div id="tab-vite" class="tab-content classic-only">
                 <details class="control-panel">
                     <summary>Project Configuration</summary>
                     <div class="form-row">
@@ -173,7 +178,7 @@
             <div id="tab-dapps" class="tab-content">
 
                 <!-- SECTION: Web / MiniDapp Management -->
-                <div class="control-panel">
+                <div class="control-panel classic-only">
                     <h3>Web / MiniDapp Management</h3>
 
                     <div class="form-row"
@@ -333,7 +338,7 @@
             </div>
 
             <!-- Tab Content: Build & Zip -->
-            <div id="tab-build" class="tab-content">
+            <div id="tab-build" class="tab-content classic-only">
                 <div class="control-panel">
                     <h3>Build Pipeline (Source to Artifact)</h3>
                     <div class="form-row">
@@ -397,8 +402,16 @@
                         value="./scripts/start_node.sh">
                 </div>
 
+                <!-- Core mode: node 1 = -solo, others = -test -nop2p -connect 10.0.0.11:9001 -->
+                <div class="control-group core-only" style="font-size: 0.8rem; color: #888;">
+                    Core: <span class="core-role"></span>
+                    <label class="checkbox-container" style="margin-left: 10px;">
+                        <input type="checkbox" class="core-clean-check"> Clean (-clean)
+                    </label>
+                </div>
+
                 <!-- Checkboxes -->
-                <div class="control-group">
+                <div class="control-group classic-only">
                     <label class="checkbox-container" style="color: #fab005;"
                         title="Binds directly to your computer's network interface (0.0.0.0). Required for public Mainnet access.">
                         <input type="checkbox" class="host-check"> Host Network Mode
@@ -412,13 +425,13 @@
                 </div>
 
                 <!-- Connect Input -->
-                <div class="control-group connect-group">
+                <div class="control-group connect-group classic-only">
                     <label>Connect to:</label>
                     <input type="text" class="connect-input" placeholder="127.0.0.1:9001">
                 </div>
 
                 <!-- Advanced Options -->
-                <details class="advanced-options">
+                <details class="advanced-options classic-only">
                     <summary>Advanced Params</summary>
                     <div class="advanced-grid">
                         <label><input type="checkbox" class="param-check" value="-mdsenable" checked>
@@ -479,9 +492,15 @@
             <span class="close-btn" id="close-global-config">&times;</span>
             <h2>Global Start Configuration</h2>
 
+            <div class="core-only" style="color: #aaa; font-size: 0.85rem; margin-bottom: 12px; line-height: 1.4;">
+                <strong>Core mode:</strong> Node 1 starts with <code>-solo</code>; the others with
+                <code>-test -nop2p -connect 10.0.0.11:9001</code>. Jar, libs and db password come from
+                <code>config.json</code> (<code>coreJarPath</code>, <code>coreLibsPath</code>, <code>coreDbPassword</code>).
+                RPC is enabled automatically over stdin once the node is up. Only the resource limits below apply.
+            </div>
             <div class="form-row">
                 <!-- Global Controls -->
-                <div class="control-group"
+                <div class="control-group classic-only"
                     style="margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
                     <label class="checkbox-container" style="color: #fab005;">
                         <input type="checkbox" id="global-host-check"> Host Network Mode
@@ -499,13 +518,13 @@
                     </div>
                 </div>
 
-                <small style="color: #888; display: block; margin-top: 10px; margin-bottom: 10px;">
+                <small class="classic-only" style="color: #888; display: block; margin-top: 10px; margin-bottom: 10px;">
                     Note: <code>-genesis</code> flag will only be applied to Node 1. <code>-connect</code> flag
                     will be applied to all nodes except Node 1.
                 </small>
 
                 <!-- Automation Options -->
-                <div
+                <div class="classic-only"
                     style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 4px; border: 1px solid #444;">
                     <label class="checkbox-container"
                         style="display: flex; align-items: center; color: white; font-weight: bold;">
@@ -539,7 +558,7 @@
                 </div>
 
                 <!-- Peer Discovery Automation -->
-                <div
+                <div class="classic-only"
                     style="margin-bottom: 15px; padding: 15px; background: #222; border-radius: 4px; border: 1px solid #444;">
                     <h4 style="margin: 0 0 10px 0; color: var(--accent-primary);">Peer Discovery Automation</h4>
                     <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
@@ -553,7 +572,7 @@
                 </div>
 
                 <!-- Global Mainnet / Testnet Switch -->
-                <div class="form-row"
+                <div class="form-row classic-only"
                     style="background: #222; padding: 15px; border-radius: 4px; border: 1px solid #444; margin-bottom: 15px;">
                     <label style="flex: 1; font-weight: bold; color: #fff;">Network Mode:</label>
                     <div style="flex: 2; display: flex; gap: 20px; align-items: center;">
@@ -573,7 +592,7 @@
                 </div>
 
                 <!-- Global Advanced Options -->
-                <details class="advanced-options" style="margin-bottom: 15px;">
+                <details class="advanced-options classic-only" style="margin-bottom: 15px;">
                     <summary>Advanced Params (Global)</summary>
                     <div class="advanced-grid">
                         <label><input type="checkbox" class="global-param-check" value="-mdsenable" checked>
@@ -604,13 +623,13 @@
                     </div>
                 </details>
 
-                <label for="global-cmd-template">Command Template ($ID will be replaced):</label>
+                <label for="global-cmd-template" class="classic-only">Command Template ($ID will be replaced):</label>
                 <input type="text" id="global-cmd-template"
                     value="./scripts/start_node.sh $ID -clean -genesis -mdsenable -test -rpcenable -rpcssl -rpccrlf -allowallip -showparams -mdspassword 123"
-                    class="command-input" style="width: 100%; margin-bottom: 10px;">
+                    class="command-input classic-only" style="width: 100%; margin-bottom: 10px;">
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
                     <button id="save-global-config-btn" class="btn btn-primary" style="flex: 1;">Save Configuration</button>
-                    <button id="apply-global-cmd-btn" class="btn btn-secondary" style="flex: 1;">Apply to All Nodes</button>
+                    <button id="apply-global-cmd-btn" class="btn btn-secondary classic-only" style="flex: 1;">Apply to All Nodes</button>
                 </div>
                 <div id="global-config-status" style="font-size: 0.85rem; color: #40c057; margin-top: 8px; text-align: center; min-height: 1.2em;"></div>
             </div>
