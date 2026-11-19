@@ -186,6 +186,16 @@ Not verified: Core and Classic nodes talking to each other; `-solo` only on node
 3. In each node's command box run `status`: both must report the same block. Or through the proxy: `curl -X POST http://localhost:3000/api/nodes/1/rpc -H 'Content-Type: application/json' -d '{"command":"status"}'` (same with `/2/`).
 4. On node 2 run `getaddress` and copy the address; on node 1 run `send address:<ADDR> amount:10`. After a block, `balance` on node 2 shows 10.
 
+## Android emulator launcher
+
+The *Android Devices* panel (Nodes tab, Classic and Core modes) lists the AVDs from `emulator -list-avds`, marks which ones are running (matched through `adb emu avd name`) and lists the `adb devices`. Clicking an AVD name opens that emulator's real window on your desktop; if it is already running (or starting) no second copy is started. Progress ("Launching...", "booted") goes to the global log, and the emulator output to `/tmp/emulator-<avd>.log`.
+
+- The emulator runs as the real desktop user (`SUDO_USER`, so start the manager with `sudo`), detached: stopping or restarting the Node Manager does not close it. Without `SUDO_USER` the launch is refused.
+- `config.json`: `androidSdkPath` (optional; otherwise derived from `adbPath`, i.e. the parent of `platform-tools`) and `emulatorArgs` (default `["-gpu","host"]`; `-gpu host` is required where the default SwiftShader renderer crashes).
+- Endpoints: `GET /api/emulator/avds` and `POST /api/emulator/launch` with `{"avd":"<name>"}`. The name must exactly match an AVD reported by `emulator -list-avds`; processes are spawned with argument arrays, never a shell string.
+
+**Security:** the Node Manager listens on all interfaces without authentication, so anyone who can reach port 3000 can launch emulators as your user. Use it only on a trusted network.
+
 ## Architecture
 
 ### Network Setup

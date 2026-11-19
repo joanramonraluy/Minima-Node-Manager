@@ -70,7 +70,9 @@ let globalConfig = {
     // and a directory with the bcprov/bcpkix/bcutil/h2 jars. See README, "Core mode".
     coreJarPath: '',
     coreLibsPath: '',
-    coreDbPassword: 'minima'
+    coreDbPassword: 'minima',
+    androidSdkPath: '', // derived from adbPath when empty
+    emulatorArgs: ['-gpu', 'host'] // -gpu host is required on some machines (SwiftShader segfaults)
 };
 
 // Load Config from File
@@ -110,6 +112,9 @@ function getAdbEnv() {
 app.use(express.json());
 
 // Serve static files from 'public' directory
+// Android emulator list/launch (AVDs; works in Classic and Core modes)
+app.use('/api/emulator', require('./lib/emulator')({ getConfig: () => globalConfig, getAdbEnv, log: (m) => io.emit('global-log', m + '\n') }));
+
 app.use(express.static('public'));
 
 // --- HTTP API Endpoints (Read-only / Debug RPC) ---

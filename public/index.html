@@ -75,6 +75,16 @@
                 </div>
 
                 <div class="nodes-scroll-area">
+                    <details class="inline-log-container" id="android-devices-panel">
+                        <summary class="log-header">Android Devices - click an AVD name to open its emulator window</summary>
+                        <div style="padding: 8px;">
+                            <button id="refresh-android-devices-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
+                            <ul id="avd-list" style="list-style: none; padding: 0; margin: 8px 0 0 0;"></ul>
+                            <div style="color: #888; font-size: 0.8rem; margin-top: 8px;">ADB devices:</div>
+                            <ul id="adb-device-list-panel" style="list-style: none; padding: 0; margin: 4px 0 0 0;"></ul>
+                        </div>
+                    </details>
+
                     <details class="inline-log-container" open>
                         <summary class="log-header">Global System Log</summary>
                         <div id="system-log" class="global-log-instance"></div>

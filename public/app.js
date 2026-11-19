@@ -2157,3 +2157,66 @@ document.querySelectorAll('.refresh-adb-devices-btn').forEach(btn => {
         }, 1000);
     };
 });
+
+
+// --- Android Devices: AVDs (click to open the emulator window) + adb devices. Both modes. ---
+function refreshAndroidDevices() {
+    const avdList = document.getElementById('avd-list');
+    const devList = document.getElementById('adb-device-list-panel');
+    if (!avdList || !devList) return;
+    fetch('/api/emulator/avds').then(r => r.json()).then(data => {
+        avdList.innerHTML = '';
+        devList.innerHTML = '';
+        if (data.error) {
+            const li = document.createElement('li');
+            li.style.color = '#fa5252';
+            li.textContent = data.error;
+            avdList.appendChild(li);
+            return;
+        }
+        if (data.avds.length === 0) {
+            const li = document.createElement('li');
+            li.style.color = '#888';
+            li.textContent = 'No AVDs found.';
+            avdList.appendChild(li);
+        }
+        data.avds.forEach(avd => {
+            const li = document.createElement('li');
+            li.style.margin = '4px 0';
+            const a = document.createElement('a');
+            a.textContent = avd.name;
+            a.style.cssText = 'color: #74c0fc; cursor: pointer; font-weight: bold;';
+            a.title = 'Open emulator window';
+            a.onclick = () => {
+                fetch('/api/emulator/launch', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ avd: avd.name })
+                }).then(r => r.json()).then(j => {
+                    if (j.error) addToGlobalLog(`[Emulator] ${j.error}`);
+                    setTimeout(refreshAndroidDevices, 1500);
+                }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
+            };
+            li.appendChild(a);
+            li.appendChild(document.createTextNode(avd.running ? ` - running (${avd.serial})` : (avd.launching ? ' - starting...' : ' - stopped')));
+            avdList.appendChild(li);
+        });
+        (data.devices || []).forEach(d => {
+            const li = document.createElement('li');
+            li.textContent = `${d.id} - ${d.state}`;
+            devList.appendChild(li);
+        });
+        if (!data.devices || data.devices.length === 0) {
+            const li = document.createElement('li');
+            li.style.color = '#888';
+            li.textContent = 'No devices.';
+            devList.appendChild(li);
+        }
+    }).catch(e => console.error('Android devices fetch failed', e));
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('refresh-android-devices-btn');
+    if (btn) btn.addEventListener('click', refreshAndroidDevices);
+    const panel = document.getElementById('android-devices-panel');
+    if (panel) panel.addEventListener('toggle', () => { if (panel.open) refreshAndroidDevices(); });
+    refreshAndroidDevices();
+});
