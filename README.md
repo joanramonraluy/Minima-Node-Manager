@@ -194,6 +194,16 @@ The *Android Devices* panel (Nodes tab, Classic and Core modes) lists the AVDs f
 - `config.json`: `androidSdkPath` (optional; otherwise derived from `adbPath`, i.e. the parent of `platform-tools`) and `emulatorArgs` (default `["-gpu","host"]`; `-gpu host` is required where the default SwiftShader renderer crashes).
 - Endpoints: `GET /api/emulator/avds` and `POST /api/emulator/launch` with `{"avd":"<name>"}`. The name must exactly match an AVD reported by `emulator -list-avds`; processes are spawned with argument arrays, never a shell string.
 
+### Android nodes and saved sessions
+
+Each AVD row in the panel is an Android "node": **Start** only boots the emulator (installing/launching the Core app stays in the existing APK/app tools). Features:
+- **Resume from** (stopped AVD): quickboot (default), cold boot (`-no-snapshot-load`) or a named snapshot (`-snapshot <name>`, names read from the AVD's `snapshots/` directory).
+- **Stop**: `adb -s <serial> emu kill`, optionally saving a snapshot first (`emu avd snapshot save <name>`); the manager waits for the device to disappear from `adb devices` and logs it.
+- **Snapshots (sessions)** drawer: list, save, load and delete for a running AVD (`adb emu avd snapshot ...`). A session is just an emulator snapshot, so the Core wallet, chain and app data of one day can be resumed another day. Restoring a snapshot of a node that already signed transactions reuses key state: use it only on test chains.
+- **Port forwards** drawer (running AVDs): list/add/remove `adb forward tcp:<host> tcp:<guest>`; host port 20000-60000 (suggested 21000 + AVD index), guest port 1024-65535 (default 11001, the Core app).
+
+Limits: the AVDs must already exist (created with Android Studio; `avdmanager` is not used). All adb/emulator calls use argument arrays; AVD names must be in `emulator -list-avds`, serials come from `adb devices`, snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator is run): `node test/emulator.test.js`.
+
 **Security:** the Node Manager listens on all interfaces without authentication, so anyone who can reach port 3000 can launch emulators as your user. Use it only on a trusted network.
 
 ## Architecture

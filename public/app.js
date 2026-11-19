@@ -2159,7 +2159,143 @@ document.querySelectorAll('.refresh-adb-devices-btn').forEach(btn => {
 });
 
 
-// --- Android Devices: AVDs (click to open the emulator window) + adb devices. Both modes. ---
+// --- Android nodes: AVDs with Start (resume-from), Stop (save first), Snapshots, Port forwards. Both modes. ---
+const androidOpenDrawers = new Set(); // "avd:snap" / "avd:fwd" drawers that stay open across refreshes
+
+function emuApi(method, url, body) {
+    return fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined
+    }).then(r => r.json().then(j => ({ ok: r.ok, j })));
+}
+function emuLog(msg) { if (typeof addToGlobalLog === 'function') addToGlobalLog(msg); }
+function mk(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    Object.assign(e, props || {});
+    kids.forEach(k => e.appendChild(typeof k === 'string' ? document.createTextNode(k) : k));
+    return e;
+}
+
+function buildAvdRow(avd, index) {
+    const li = mk('li', {});
+    li.style.cssText = 'margin: 6px 0; padding: 6px; background: #1a1a1a; border-radius: 4px;';
+    const name = mk('a', { textContent: avd.name, title: 'Start (uses the resume-from selector)' });
+    name.style.cssText = 'color: #74c0fc; cursor: pointer; font-weight: bold;';
+    const status = mk('span', { textContent: avd.running ? ` running (${avd.serial}) ` : (avd.launching ? ' starting... ' : ' stopped ') });
+    status.style.color = avd.running ? '#40c057' : '#888';
+    li.append(name, status);
+
+    const doAction = (promise, okMsg) => promise.then(({ ok, j }) => {
+        if (!ok) emuLog(`[Emulator] ${j.error || 'error'}`); else if (okMsg) emuLog(`[Emulator] ${okMsg(j)}`);
+        setTimeout(refreshAndroidDevices, 1000);
+        return { ok, j };
+    }).catch(e => emuLog(`[Emulator] ${e.message}`));
+
+    if (!avd.running) {
+        const resume = mk('select', {}, mk('option', { value: 'quickboot', textContent: 'resume: quickboot' }),
+            mk('option', { value: 'cold', textContent: 'resume: cold boot' }));
+        resume.className = 'command-input';
+        resume.style.cssText = 'width: auto; margin: 0 6px;';
+        resume.addEventListener('focus', () => {
+            if (resume.dataset.loaded) return;
+            resume.dataset.loaded = '1';
+            fetch('/api/emulator/snapshots?avd=' + encodeURIComponent(avd.name)).then(r => r.json()).then(j => {
+                (j.snapshots || []).forEach(n => resume.appendChild(mk('option', { value: 'snap:' + n, textContent: 'resume: snapshot ' + n })));
+            });
+        });
+        const start = mk('button', { textContent: 'Start', className: 'btn btn-small btn-primary' });
+        const startFn = () => {
+            let r = { mode: 'quickboot' };
+            if (resume.value === 'cold') r = { mode: 'cold' };
+            else if (resume.value.startsWith('snap:')) r = { mode: 'snapshot', name: resume.value.slice(5) };
+            doAction(emuApi('POST', '/api/emulator/launch', { avd: avd.name, resume: r }), j => `${avd.name}: ${j.status}`);
+        };
+        start.onclick = startFn;
+        name.onclick = startFn;
+        li.append(resume, start);
+    } else {
+        const saveChk = mk('input', { type: 'checkbox' });
+        const saveName = mk('input', { type: 'text', placeholder: 'snapshot name', value: 'session-' + new Date().toISOString().slice(0, 10) });
+        saveName.className = 'command-input';
+        saveName.style.cssText = 'width: 150px; margin-left: 4px;';
+        const stop = mk('button', { textContent: 'Stop', className: 'btn btn-small btn-danger' });
+        stop.onclick = () => {
+            const body = { avd: avd.name };
+            if (saveChk.checked) body.saveAs = saveName.value.trim();
+            stop.disabled = true;
+            doAction(emuApi('POST', '/api/emulator/stop', body), () => `${avd.name} stopped.`).then(() => { stop.disabled = false; });
+        };
+        li.append(stop, mk('label', {}, ' ', saveChk, ' save to snapshot first '), saveName);
+        name.onclick = () => emuLog(`[Emulator] ${avd.name} is already running (${avd.serial}).`);
+    }
+
+    // Snapshots drawer
+    const snapD = mk('details', {}, mk('summary', { textContent: 'Snapshots (sessions)' }));
+    snapD.open = androidOpenDrawers.has(avd.name + ':snap');
+    snapD.addEventListener('toggle', () => { snapD.open ? androidOpenDrawers.add(avd.name + ':snap') : androidOpenDrawers.delete(avd.name + ':snap'); if (snapD.open) loadSnaps(); });
+    const snapBody = mk('div', {});
+    snapD.appendChild(mk('div', { textContent: 'Warning: restoring a snapshot of a node that already signed transactions reuses key state. Use it only on test chains.' })).style.cssText = 'color: #fab005; font-size: 0.8rem; margin: 4px 0;';
+    snapD.appendChild(snapBody);
+    function loadSnaps() {
+        snapBody.innerHTML = '';
+        fetch('/api/emulator/snapshots?avd=' + encodeURIComponent(avd.name)).then(r => r.json()).then(j => {
+            if (j.error) { snapBody.textContent = j.error; return; }
+            if (!j.snapshots.length) snapBody.appendChild(mk('div', { textContent: 'No snapshots.' }));
+            j.snapshots.forEach(n => {
+                const row = mk('div', {}, n + ' ');
+                if (j.running) {
+                    const load = mk('button', { textContent: 'Load', className: 'btn btn-small btn-neutral' });
+                    load.onclick = () => doAction(emuApi('POST', '/api/emulator/snapshots/load', { avd: avd.name, name: n }), () => `${avd.name}: snapshot ${n} loaded`).then(loadSnaps);
+                    const del = mk('button', { textContent: 'Delete', className: 'btn btn-small btn-danger' });
+                    del.onclick = () => { if (confirm(`Delete snapshot ${n}?`)) doAction(emuApi('POST', '/api/emulator/snapshots/delete', { avd: avd.name, name: n }), () => `${avd.name}: snapshot ${n} deleted`).then(loadSnaps); };
+                    row.append(load, del);
+                }
+                snapBody.appendChild(row);
+            });
+            if (j.running) {
+                const nm = mk('input', { type: 'text', placeholder: 'new snapshot name' });
+                nm.className = 'command-input'; nm.style.cssText = 'width: 160px;';
+                const save = mk('button', { textContent: 'Save snapshot', className: 'btn btn-small btn-primary' });
+                save.onclick = () => doAction(emuApi('POST', '/api/emulator/snapshots/save', { avd: avd.name, name: nm.value.trim() }), () => `${avd.name}: snapshot saved`).then(loadSnaps);
+                snapBody.append(nm, save);
+            } else {
+                snapBody.appendChild(mk('small', { textContent: 'Start the AVD to save/load/delete; stopped AVDs can resume from a snapshot with Start.' }));
+            }
+        });
+    }
+    li.appendChild(snapD);
+
+    // Port forwards drawer (running AVDs only)
+    if (avd.running) {
+        const fwdD = mk('details', {}, mk('summary', { textContent: 'Port forwards' }));
+        fwdD.open = androidOpenDrawers.has(avd.name + ':fwd');
+        const fwdBody = mk('div', {});
+        fwdD.appendChild(fwdBody);
+        fwdD.addEventListener('toggle', () => { fwdD.open ? androidOpenDrawers.add(avd.name + ':fwd') : androidOpenDrawers.delete(avd.name + ':fwd'); if (fwdD.open) loadFwd(); });
+        function loadFwd() {
+            fwdBody.innerHTML = '';
+            fetch('/api/emulator/forwards?avd=' + encodeURIComponent(avd.name)).then(r => r.json()).then(j => {
+                if (j.error) { fwdBody.textContent = j.error; return; }
+                j.forwards.forEach(f => {
+                    const row = mk('div', {}, `host ${f.hostPort} -> guest ${f.guestPort} `);
+                    const rm = mk('button', { textContent: 'Remove', className: 'btn btn-small btn-danger' });
+                    rm.onclick = () => doAction(emuApi('POST', '/api/emulator/forwards/remove', { avd: avd.name, hostPort: f.hostPort }), () => `${avd.name}: forward ${f.hostPort} removed`).then(loadFwd);
+                    row.appendChild(rm); fwdBody.appendChild(row);
+                });
+                const hp = mk('input', { type: 'number', value: 21000 + index, min: 20000, max: 60000 });
+                const gp = mk('input', { type: 'number', value: 11001, min: 1024, max: 65535 });
+                [hp, gp].forEach(x => { x.className = 'command-input'; x.style.cssText = 'width: 90px;'; });
+                const add = mk('button', { textContent: 'Add forward', className: 'btn btn-small btn-primary' });
+                add.onclick = () => doAction(emuApi('POST', '/api/emulator/forwards/add', { avd: avd.name, hostPort: parseInt(hp.value, 10), guestPort: parseInt(gp.value, 10) }), () => `${avd.name}: forward added`).then(loadFwd);
+                fwdBody.append('host ', hp, ' guest ', gp, ' ', add);
+            });
+        }
+        li.appendChild(fwdD);
+        if (fwdD.open) loadFwd();
+    }
+    if (snapD.open) loadSnaps();
+    return li;
+}
+
 function refreshAndroidDevices() {
     const avdList = document.getElementById('avd-list');
     const devList = document.getElementById('adb-device-list-panel');
@@ -2168,49 +2304,13 @@ function refreshAndroidDevices() {
         avdList.innerHTML = '';
         devList.innerHTML = '';
         if (data.error) {
-            const li = document.createElement('li');
-            li.style.color = '#fa5252';
-            li.textContent = data.error;
-            avdList.appendChild(li);
+            avdList.appendChild(mk('li', { textContent: data.error })).style.color = '#fa5252';
             return;
         }
-        if (data.avds.length === 0) {
-            const li = document.createElement('li');
-            li.style.color = '#888';
-            li.textContent = 'No AVDs found.';
-            avdList.appendChild(li);
-        }
-        data.avds.forEach(avd => {
-            const li = document.createElement('li');
-            li.style.margin = '4px 0';
-            const a = document.createElement('a');
-            a.textContent = avd.name;
-            a.style.cssText = 'color: #74c0fc; cursor: pointer; font-weight: bold;';
-            a.title = 'Open emulator window';
-            a.onclick = () => {
-                fetch('/api/emulator/launch', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ avd: avd.name })
-                }).then(r => r.json()).then(j => {
-                    if (j.error) addToGlobalLog(`[Emulator] ${j.error}`);
-                    setTimeout(refreshAndroidDevices, 1500);
-                }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
-            };
-            li.appendChild(a);
-            li.appendChild(document.createTextNode(avd.running ? ` - running (${avd.serial})` : (avd.launching ? ' - starting...' : ' - stopped')));
-            avdList.appendChild(li);
-        });
-        (data.devices || []).forEach(d => {
-            const li = document.createElement('li');
-            li.textContent = `${d.id} - ${d.state}`;
-            devList.appendChild(li);
-        });
-        if (!data.devices || data.devices.length === 0) {
-            const li = document.createElement('li');
-            li.style.color = '#888';
-            li.textContent = 'No devices.';
-            devList.appendChild(li);
-        }
+        if (data.avds.length === 0) avdList.appendChild(mk('li', { textContent: 'No AVDs found (create them with Android Studio; avdmanager is not used).' })).style.color = '#888';
+        data.avds.forEach((avd, i) => avdList.appendChild(buildAvdRow(avd, i)));
+        (data.devices || []).forEach(d => devList.appendChild(mk('li', { textContent: `${d.id} - ${d.state}` })));
+        if (!data.devices || data.devices.length === 0) devList.appendChild(mk('li', { textContent: 'No devices.' })).style.color = '#888';
     }).catch(e => console.error('Android devices fetch failed', e));
 }
 document.addEventListener('DOMContentLoaded', () => {
