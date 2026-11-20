@@ -20,10 +20,12 @@ async function run(cmd, args) {
     if (/emu avd name$/.test(a)) return 'Phone_A\nOK\n';
     if (/pm list packages/.test(a)) return st.installed ? 'package:org.minima.coretestnode\n' : '';
     if (/ install -r /.test(' ' + a)) { if (st.installFail) throw new Error('Exception occurred while executing install:\nandroid.os.ParcelableException: java.io.IOException: x\n\tat a.b(C.java:1)\nCaused by: java.io.IOException: Requested internal only, but not enough space\n\tat d.e(F.java:2)'); st.installed = true; return 'Success\n'; }
+    if (/shell pidof /.test(a)) { if (!st.nodeUp) throw new Error('exit 1'); return '1234\n'; }
+    if (/shell dumpsys package /.test(a)) return 'Packages:\n  versionCode=2 minSdk=24\n    versionName=1.2.3\n    lastUpdateTime=2026-11-20 10:11:12\n';
     if (/force-stop|pm clear/.test(a)) { st.nodeUp = false; return ''; }
     if (/start-foreground-service/.test(a)) { st.nodeUp = true; return 'Starting service\n'; }
     let m = a.match(/am broadcast .* --es id (\S+) --es cmd '(.*)'$/);
-    if (m) { st.lastId = m[1]; st.lastCmd = m[2]; return 'Broadcast completed\n'; }
+    if (m) { st.lastId = m[1]; st.lastCmd = m[2]; if (m[2] === 'quit' && st.quitWorks) st.nodeUp = false; return 'Broadcast completed\n'; }
     if (/logcat -d -s CoreTestNode/.test(a)) {
         if (!st.nodeUp || !st.lastId) return '';
         const body = JSON.stringify({ command: 'status', status: true, response: { version: '1.1.2', chain: { block: 306, hash: '0xABC' }, network: { connected: 1, port: 12001 }, uptime: '1m' } });
@@ -33,7 +35,7 @@ async function run(cmd, args) {
     throw new Error('unexpected call: ' + cmd + ' ' + a);
 }
 const logs = [];
-const cfg = { androidSdkPath: path.join(tmp, 'sdk'), adbPath: 'adb', coreTestNodeApk: apk, androidNodePollMs: 5, androidNodeStatusWaitMs: 200, emulatorStopPollMs: 5 };
+const cfg = { androidSdkPath: path.join(tmp, 'sdk'), adbPath: 'adb', coreTestNodeApk: apk, androidNodePollMs: 5, androidNodeStatusWaitMs: 200, androidNodeQuitWaitMs: 60, emulatorStopPollMs: 5 };
 const emu = require('../lib/emulator')({ getConfig: () => cfg, getAdbEnv: () => process.env, log: m => logs.push(m), run, avdRoot: () => tmp, spawnProc: () => ({ pid: 1, on() { }, unref() { } }) });
 let nextPort = 12001;
 const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => logs.push(m), helpers: emu._helpers, pickPort: () => nextPort++ });
@@ -80,7 +82,18 @@ const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => 
     r = await post('/cmd', { avd: 'Phone_A', command: 'x'.repeat(301) }); assert.equal(r.s, 400); ok('too long command rejected');
     r = await post('/cmd', { avd: 'Phone_A' }); assert.equal(r.s, 400); ok('missing command rejected');
 
-    r = await post('/stop', { avd: 'Phone_A' }); assert.equal(r.s, 200); assert.equal(st.nodeUp, false); ok('stop');
+    r = await get('/apk'); assert.deepEqual([r.j.found, r.j.name, r.j.size], [true, 'CoreTestNode.apk', 1]); assert.ok(r.j.mtime); ok('apk info');
+    r = await get('/status?avd=Phone_A'); assert.equal(r.j.appVersion, undefined); ok('status without details has no package info');
+    r = await get('/status?avd=Phone_A&details=1'); assert.deepEqual([r.j.appVersion, r.j.appUpdated], ['1.2.3', '2026-11-20 10:11:12']); ok('status details: installed version and install time');
+
+    st.calls.length = 0; st.nodeUp = true; st.quitWorks = false;
+    r = await post('/stop', { avd: 'Phone_A' }); assert.equal(r.s, 200); assert.equal(st.nodeUp, false);
+    assert.ok(st.calls.findIndex(c => /--es cmd 'quit'/.test(c)) >= 0 && st.calls.findIndex(c => /force-stop/.test(c)) > st.calls.findIndex(c => /--es cmd 'quit'/.test(c))); ok('stop asks the node to quit first, then force-stops (fallback when it does not exit)');
+    st.calls.length = 0; st.nodeUp = true; st.quitWorks = true;
+    await post('/stop', { avd: 'Phone_A' }); assert.equal(st.nodeUp, false); ok('stop with a node that quits cleanly');
+    st.calls.length = 0; st.nodeUp = false;
+    await post('/stop', { avd: 'Phone_A' }); assert.ok(!st.calls.some(c => /--es cmd 'quit'/.test(c))); assert.ok(st.calls.some(c => /force-stop/.test(c))); ok('stop does not send quit when the node is not running');
+    st.quitWorks = false;
     r = await post('/wipe', { avd: 'Phone_A' }); assert.equal(r.s, 200); assert.ok(st.calls.some(c => /pm clear org\.minima\.coretestnode/.test(c))); ok('wipe');
     r = await post('/cmd', { avd: 'Phone_A', command: 'status' }); assert.equal(r.s, 504); ok('no reply when node stopped (504)');
 
