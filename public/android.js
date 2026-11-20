@@ -262,7 +262,7 @@ function networkVerdict(rows) {
     const fork = Object.keys(byBlock).find(b => byBlock[b].size > 1);
     if (fork) return { text: `FORK at block ${fork}`, cls: 'bad' };
     const spread = Math.max(...up.map(r => r.block)) - Math.min(...up.map(r => r.block));
-    return spread <= 2 ? { text: `in sync (${up.length} nodes)`, cls: 'ok' } : { text: `diverging: blocks differ by ${spread}`, cls: 'bad' };
+    return spread <= 2 ? { text: `in sync (${up.length} nodes)`, cls: 'ok' } : { text: `not in sync: blocks differ by ${spread} (a node may still be syncing)`, cls: 'bad' };
 }
 
 async function refreshNetwork() {
@@ -347,7 +347,8 @@ const gl = (tag, msg) => addToGlobalLog(`[${tag}] ${msg}`);
 // Installs the node app if missing and (re)starts the node joined to the seed. Returns true when started.
 async function startAndroidNode(avdName, tag = 'AndroidNode') {
     let st = (await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(avdName))).j;
-    if (st.nodeUp) { gl(tag, `${avdName}: node already up (block ${st.block}).`); return true; }
+    if (st.nodeUp && st.connected > 0) { gl(tag, `${avdName}: node already up (block ${st.block}, ${st.connected} peer(s)).`); return true; }
+    if (st.nodeUp) gl(tag, `${avdName}: node is up but has no peers (the seed probably restarted): restarting it to rejoin the seed.`);
     if (!st.installed) {
         if (!st.apk) { gl(tag, `${avdName}: CoreTestNode.apk not found (set coreTestNodeApk in config.json).`); return false; }
         gl(tag, `${avdName}: installing the node app...`);
@@ -438,7 +439,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStatus(`starting node on ${name}...`);
                 if (!(await startAndroidNode(name, tag))) failed++;
             }
-            setStatus(failed ? `started, ${failed} Android node(s) failed` : 'all started', failed ? 'bad' : 'ok');
+            // 4. A fresh Android node can connect to the seed and still stay at block 0 (observed, cause unknown). Say so instead of "all started".
+            setStatus('checking sync...');
+            const stuck = [];
+            for (const name of wanted) {
+                const synced = await waitFor(async () => {
+                    const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
+                    if (!r.ok || !r.j.nodeUp) return true; // not started (already reported above)
+                    return r.j.block > 0;
+                }, 90000, 5000);
+                if (!synced) stuck.push(name);
+            }
+            if (stuck.length) {
+                gl(tag, `${stuck.join(', ')}: connected but still at block 0 after 90 s. Observed (cause unknown): stopping and starting headless node 1 (the seed) while the Android node is connected made it download the chain in one test. See the README troubleshooting entry.`);
+                failed += stuck.length;
+            }
+            setStatus(failed ? `started, ${failed} Android node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
             gl(tag, failed ? `Done with ${failed} failure(s): see the lines above.` : 'Done. See the Network table for the sync state.');
             setTimeout(refreshAndroidDevices, 1000); setTimeout(refreshNetwork, 15000); setTimeout(refreshNetwork, 40000);
         } catch (e) { gl(tag, e.message); setStatus('error', 'bad'); }

@@ -135,7 +135,7 @@ The mode selector (**Classic / MDS** or **Core 1.1**) and the tabs available for
 - **Classic**: a toolbar with *Start All Nodes*, *Stop All Nodes*, the node counter and *+ Add Node*; *Open All* (web UI of every running node); *Clear All Logs* and *Toggle View*; and a danger zone (*Kill All Processes*, *Delete All Data*). The gear opens the **Global Start Configuration**. Below: the global system log and one card per node (start command preview, Start/Stop, logs, command box, per-node network and delete-data buttons).
 - **Core** is organised by node type, because the two kinds of node behave differently:
   - **Everything** bar: *Start Everything* (headless nodes, waiting for the seed's RPC, then the emulators, then the node app on each Android node, joined to the seed), *Stop Everything* (Android nodes, then headless nodes; tick *also close emulators* to close them too) and *Clear All Logs*.
-  - **Network**: one table with every running node (headless and Android): block, tip hash and peers. Click a row to list that node's peers. The indicator says *in sync*, *diverging* (blocks differ by more than 2) or *FORK* (same block, different tip hash).
+  - **Network**: one table with every running node (headless and Android): block, tip hash and peers. Click a row to list that node's peers. The indicator says *in sync*, *not in sync* (blocks differ by more than 2; a freshly started node needs a while to catch up) or *FORK* (same block, different tip hash).
   - **Android nodes**: its own toolbar (*Open All Emulators*, *Stop All Emulators*, *+ New AVD*; *Start All Nodes*, *Stop All Nodes*; danger zone *Wipe All Node Data*) and one card per AVD (see [Android nodes](#android-nodes-emulators-and-coretestnode)).
   - **Test scenarios**: runs the scripts configured in `testScenarios` and shows their output (see [Test scenarios](#test-scenarios)).
   - **Headless nodes**: the node cards plus their toolbar (*Start All Nodes*, *Stop All Nodes*, counter, *+ Add Node*, *Toggle View*, *Kill All Processes*, *Delete All Data*). They are Java processes on this computer with no window.
@@ -350,6 +350,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### "Permission denied" errors
 The application requires sudo privileges to manage network namespaces. Make sure you're running it with sudo or that the `nodemanager` script is using sudo correctly.
+
+### An Android node is connected but stays at block 0
+Observed on this setup (not understood): a fresh Android node (new install or *Wipe data*) that connects to a seed that is already running can stay at block 0 with 1 peer, for minutes. Restarting the Android node does not help, and if it had just synced it can lose what was not yet saved. In one test, stopping and starting the **seed (headless node 1)** while two Android nodes were connected made one of them download the chain within a minute; the other stayed at block 0. In the very first test the node synced within 40 s of its first start. *Start Everything* reports a node still at block 0 after 90 s ("need attention") instead of "all started". If it happens, restart the seed with the Android nodes connected and check the *Network* table; the cause inside Minima Core is not known.
 
 ### Nodes won't start
 1. Classic: check that Minima is installed (`which minima`). Core: check `coreJarPath` / `coreLibsPath` and that Java is installed.
