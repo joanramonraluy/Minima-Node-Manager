@@ -134,13 +134,13 @@ The mode selector (**Classic / MDS** or **Core 1.1**) and the tabs available for
 ### Nodes tab
 - **Classic**: a toolbar with *Start All Nodes*, *Stop All Nodes*, the node counter and *+ Add Node*; *Open All* (web UI of every running node); *Clear All Logs* and *Toggle View*; and a danger zone (*Kill All Processes*, *Delete All Data*). The gear opens the **Global Start Configuration**. Below: the global system log and one card per node (start command preview, Start/Stop, logs, command box, per-node network and delete-data buttons).
 - **Core** is organised by node type, because the two kinds of node behave differently:
-  - **Everything** bar: *Start Everything* (headless nodes, waiting for the seed's RPC, then the emulators, then the node app on each Android node, joined to the seed), *Stop Everything* (Android nodes, then headless nodes; tick *also close emulators* to close them too) and *Clear All Logs*.
+  - **Everything** bar: *Start Everything* (headless nodes, waiting for the seed's RPC, then the Android *Start All* routine), *Stop Everything* (Android nodes, then headless nodes; tick *also close emulators* to close them too) and *Clear All Logs*.
   - **Network**: one table with every running node (headless and Android): block, tip hash and peers. Click a row to list that node's peers. The indicator says *in sync*, *not in sync* (blocks differ by more than 2; a freshly started node needs a while to catch up) or *FORK* (same block, different tip hash).
-  - **Android nodes**: its own toolbar (*Open All Emulators*, *Stop All Emulators*, *+ New AVD*; *Start All Nodes*, *Stop All Nodes*; danger zone *Wipe All Node Data*) and one card per AVD (see [Android nodes](#android-nodes-emulators-and-coretestnode)).
+  - **Android nodes**: its own toolbar (*Start All*, *Stop All* with *also close emulators*, *+ New AVD*, danger zone *Wipe All Node Data*) and one card per AVD (see [Android nodes](#android-nodes-emulators-and-coretestnode)).
   - **Test scenarios**: runs the scripts configured in `testScenarios` and shows their output (see [Test scenarios](#test-scenarios)).
   - **Headless nodes**: the node cards plus their toolbar (*Start All Nodes*, *Stop All Nodes*, counter, *+ Add Node*, *Toggle View*, *Kill All Processes*, *Delete All Data*). They are Java processes on this computer with no window.
 
-> The *Nodes* buttons of each section act only on that kind of node: *Start All Nodes* in *Headless nodes* never launches an emulator, and *Open All Emulators* never starts a node. Use *Start Everything* for both.
+> The buttons of each section act only on that kind of node: *Start All Nodes* in *Headless nodes* never launches an emulator, and the Android *Start All* never starts a headless node. Use *Start Everything* for both.
 
 ## Classic mode (MDS)
 
@@ -196,7 +196,8 @@ An **Android node** is an Android emulator (AVD) that runs a Minima Core node. T
 
 The *Android nodes* section of the Nodes tab lists the AVDs from `emulator -list-avds`, marks which ones are running (matched through `adb emu avd name`) and lists the `adb devices`. For each AVD:
 
-- **Emulator**: *Start* opens the real emulator window on your desktop (if it is already running or starting, no second copy is started). *Open All Emulators* does the same for every AVD that is not running yet, one at a time with a short pause (`emulatorLaunchPauseMs`, default 3000 ms). Progress goes to the global log and the emulator output to `/tmp/emulator-<avd>.log`.
+- **Emulator**: the card's *Start* opens the real emulator window on your desktop (if it is already running or starting, no second copy is started). Progress goes to the global log and the emulator output to `/tmp/emulator-<avd>.log`. Booting an emulator does **not** start the node: CoreTestNode has no boot receiver, so the manager starts it (the official Core app does start itself on boot, but it cannot take node parameters). A quickboot snapshot that had the node running brings it back running.
+- **Android *Start All***: opens the emulators that are not running (one at a time, with a short pause: `emulatorLaunchPauseMs`, default 3000 ms), waits for each to boot, installs the node app if missing, starts a node joined to the seed, and checks that every node leaves block 0 (restarting it once on a new port if not). **Android *Stop All***: stops the node on every running emulator; tick *also close emulators* to close them too.
 - **Minima node** (running AVDs): status line (block, peers, port), *Install node app*, *Start node*, *Stop node*, *Wipe data* and a command box.
   - *Start node* offers **join desktop seed** (`-test -nop2p -connect 10.0.0.11:9001 -port <random 12001-12999>`: the Android node syncs the chain of desktop node 1) or **own chain** (`-solo -port 12001`).
   - *Stop node* force-stops the app; the chain data is kept. *Wipe data* clears it.
@@ -362,7 +363,7 @@ Fix in the manager: *Start node* now picks a **random port (12001-12999) on ever
 3. Check logs in the UI or via: `sudo journalctl -u minima-manager -f`
 
 ### Start All Nodes only starts nodes (Core mode)
-*Start All Nodes* starts the Core node processes of your computer. Emulators are launched with *Open All Emulators* (or each AVD's Start button in the *Android nodes* section), and you only get as many emulators as AVDs you have created.
+*Start All Nodes* starts the Core node processes of your computer. Emulators are launched by the Android *Start All* (or each AVD's Start button in the *Android nodes* section), and you only get as many emulators as AVDs you have created.
 
 ### Port conflicts
 If port 3000 is already in use, start the server with another one: `sudo PORT=3001 node server.js` (the `nodemanager` launcher runs `sudo node server.js`, so use `sudo env PORT=3001 node server.js`).

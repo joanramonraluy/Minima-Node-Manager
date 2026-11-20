@@ -567,18 +567,6 @@ if (clearAllLogsBtn) {
     };
 }
 
-// Core: open every AVD that is not running yet (button in the Android nodes section; does not start nodes)
-const openAllEmulatorsBtn = document.getElementById('open-all-emulators-btn');
-if (openAllEmulatorsBtn) openAllEmulatorsBtn.onclick = () => {
-    fetch('/api/emulator/launch-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .then(r => r.json()).then(j => {
-            if (j.error) { addToGlobalLog(`[Emulator] ${j.error}`); return; }
-            const todo = j.avds.filter(a => a.plan === 'launch').length;
-            addToGlobalLog(`[Emulator] Open All: ${todo} to launch, ${j.avds.length - todo} already running/starting (progress below).`);
-            setTimeout(refreshAndroidDevices, 4000);
-        }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
-};
-
 // Classic: open the MDS web UI of every running node
 document.getElementById('open-all-btn').onclick = () => {
     let opened = 0;

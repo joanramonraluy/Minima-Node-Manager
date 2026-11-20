@@ -139,19 +139,14 @@
                         </div>
                         <div class="tab-toolbar android-toolbar">
                             <div class="tb-group">
-                                <span class="tb-label">Emulators</span>
+                                <span class="tb-label">Android nodes</span>
                                 <div class="tb-row">
-                                    <button id="open-all-emulators-btn" class="btn btn-blue"
-                                        title="Open all Android emulators (AVDs) that are not running yet. Does not start nodes.">Open All Emulators</button>
-                                    <button id="stop-all-emulators-btn" class="btn btn-danger" title="Close every running emulator">Stop All Emulators</button>
+                                    <button id="start-android-btn" class="btn btn-primary"
+                                        title="Opens the emulators that are not running, waits for them to boot, installs the node app if missing and starts a Minima node joined to the headless seed">Start All</button>
+                                    <button id="stop-android-btn" class="btn btn-danger"
+                                        title="Stops the Minima node on every running emulator (the chain is kept)">Stop All</button>
+                                    <label class="checkbox-container" style="font-size: 0.8rem;"><input type="checkbox" id="stop-android-emus-chk"> also close emulators</label>
                                     <button id="new-avd-btn" class="btn btn-small btn-add" title="Create an AVD by cloning an existing one">+ New AVD</button>
-                                </div>
-                            </div>
-                            <div class="tb-group">
-                                <span class="tb-label">Minima nodes</span>
-                                <div class="tb-row">
-                                    <button id="start-android-nodes-btn" class="btn btn-primary" title="On every running emulator: install the node app if missing and join the desktop seed">Start All Nodes</button>
-                                    <button id="stop-android-nodes-btn" class="btn btn-danger" title="Stop the Minima node on every running emulator (chain data is kept)">Stop All Nodes</button>
                                 </div>
                             </div>
                             <div class="tb-group tb-danger">
@@ -160,6 +155,7 @@
                                     <button id="wipe-android-nodes-btn" class="btn btn-danger" title="Stop the node and delete its chain on every running emulator">Wipe All Node Data</button>
                                 </div>
                             </div>
+                            <span id="android-status" class="net-chip" style="align-self: center;"></span>
                         </div>
                         <div id="new-avd-form" class="new-avd-form" style="display: none;">
                             <input type="text" id="new-avd-name" class="command-input" placeholder="AVD name (e.g. Minima_Node_3)" style="width: 220px;">
@@ -169,7 +165,7 @@
                             <small>Clones the first existing AVD (same system image).</small>
                         </div>
                         <details class="inline-log-container" id="android-devices-panel" open>
-                            <summary class="log-header">Emulators (AVDs) and their Minima node</summary>
+                            <summary class="log-header">Emulators (AVDs) and their Minima node: each card has its own Start / Stop for the emulator and the node</summary>
                             <div style="padding: 8px;">
                                 <button id="refresh-android-devices-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
                                 <ul id="avd-list" style="list-style: none; padding: 0; margin: 8px 0 0 0;"></ul>

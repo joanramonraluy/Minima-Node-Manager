@@ -344,11 +344,12 @@ async function runningAvds() {
 }
 const gl = (tag, msg) => addToGlobalLog(`[${tag}] ${msg}`);
 
-// Installs the node app if missing and (re)starts the node joined to the seed. Returns true when started.
+// Installs the node app if missing and (re)starts the node joined to the seed (each start picks a new random
+// -port). Returns true when the start was requested. `force` restarts a node that is already up.
 async function startAndroidNode(avdName, tag = 'AndroidNode', force = false) {
     let st = (await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(avdName))).j;
     if (!force && st.nodeUp && st.connected > 0) { gl(tag, `${avdName}: node already up (block ${st.block}, ${st.connected} peer(s)).`); return true; }
-    if (st.nodeUp) gl(tag, `${avdName}: node is up but has no peers (the seed probably restarted): restarting it to rejoin the seed.`);
+    if (st.nodeUp) gl(tag, `${avdName}: node is up but ${force ? 'is being restarted' : 'has no peers (the seed probably restarted): restarting it to rejoin the seed'}.`);
     if (!st.installed) {
         if (!st.apk) { gl(tag, `${avdName}: CoreTestNode.apk not found (set coreTestNodeApk in config.json).`); return false; }
         gl(tag, `${avdName}: installing the node app...`);
@@ -360,125 +361,125 @@ async function startAndroidNode(avdName, tag = 'AndroidNode', force = false) {
     gl(tag, `${avdName}: node starting (${r.j.params}).`);
     return true;
 }
-async function forEachRunningAvd(fn) {
-    const avds = await runningAvds();
-    if (!avds.length) gl('AndroidNode', 'No emulator is running.');
-    const results = [];
-    for (const a of avds) results.push(await fn(a));
-    return results;
+
+// Android "Start All": open the emulators that are not running, wait for each to boot, install/start the node,
+// then check that every node got the chain. Returns the number of nodes that need attention.
+async function startAllAndroid(tag, setStatus) {
+    setStatus('starting emulators...');
+    const la = await emuApi('POST', '/api/emulator/launch-all', {});
+    if (!la.ok) { gl(tag, `launch-all failed: ${la.j.error || 'error'}`); setStatus('emulators failed', 'bad'); return 1; }
+    const wanted = la.j.avds.map(a => a.name);
+    gl(tag, `Emulators: ${wanted.length} AVD(s) (${la.j.avds.filter(a => a.plan === 'launch').length} to launch).`);
+    let failed = 0;
+    const started = [];
+    for (const name of wanted) {
+        setStatus(`waiting for ${name}...`);
+        const ready = await waitFor(async () => {
+            const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
+            return r.ok && r.j.running ? r.j : null;
+        }, 240000, 4000);
+        if (!ready) { failed++; gl(tag, `${name}: not ready within 4 min (skipped). If it crashed earlier, check for an "emulator closed unexpectedly" dialog.`); continue; }
+        setStatus(`starting node on ${name}...`);
+        if (await startAndroidNode(name, tag)) started.push(name); else failed++;
+    }
+    // The seed sends the chain once per host:port and each start picks a new random port, so a node still at
+    // block 0 is restarted once (new port) before warning.
+    setStatus('checking sync...');
+    const atBlock0 = async name => { const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name)); return r.ok && r.j.nodeUp && !(r.j.block > 0); };
+    const syncWait = name => waitFor(async () => !(await atBlock0(name)), 60000, 5000);
+    for (const name of started) {
+        if (await syncWait(name)) continue;
+        gl(tag, `${name}: still at block 0 after 60 s: restarting its node on a new port.`);
+        await startAndroidNode(name, tag, true);
+        if (await syncWait(name)) continue;
+        gl(tag, `${name}: still at block 0. See the README troubleshooting entry (the seed sends the chain once per address).`);
+        failed++;
+    }
+    setStatus(failed ? `${failed} node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
+    gl(tag, failed ? `Done with ${failed} problem(s): see the lines above.` : 'Android nodes started. See the Network table for the sync state.');
+    setTimeout(refreshAndroidDevices, 1000); setTimeout(refreshNetwork, 15000); setTimeout(refreshNetwork, 40000);
+    return failed;
+}
+
+// Android "Stop All": stop the node on every running emulator; optionally close the emulators too.
+async function stopAllAndroid(tag, closeEmulators) {
+    const avds = await runningAvds().catch(() => []);
+    if (!avds.length) gl(tag, 'No emulator is running.');
+    for (const a of avds) {
+        const r = await androidNodeApi('POST', '/stop', { avd: a.name });
+        gl(tag, `${a.name}: ${r.ok ? 'node stopped' : (r.j.error || 'error')}`);
+        if (closeEmulators) { const e = await emuApi('POST', '/api/emulator/stop', { avd: a.name }); gl(tag, `${a.name}: ${e.ok ? 'emulator stopped' : (e.j.error || 'error')}`); }
+    }
+    setTimeout(refreshAndroidDevices, 1500); setTimeout(refreshNetwork, 5000);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = async () => { el.disabled = true; try { await fn(); } catch (e) { gl('AndroidNode', e.message); } finally { el.disabled = false; setTimeout(refreshAndroidDevices, 1500); setTimeout(refreshNetwork, 12000); } }; };
-    on('start-android-nodes-btn', async () => { await forEachRunningAvd(a => startAndroidNode(a.name)); });
-    on('stop-android-nodes-btn', async () => {
-        await forEachRunningAvd(async a => { const r = await androidNodeApi('POST', '/stop', { avd: a.name }); gl('AndroidNode', `${a.name}: ${r.ok ? 'node stopped' : (r.j.error || 'error')}`); });
+    const chip = (id) => (t, cls = '') => { const el = document.getElementById(id); if (el) { el.textContent = t; el.className = 'net-chip ' + cls; } };
+    const setAndroidStatus = chip('android-status');
+    const setEverythingStatus = chip('everything-status');
+    let busy = false;
+    const guarded = (btns, fn) => async () => {
+        if (busy) return; busy = true; btns.forEach(b => b && (b.disabled = true));
+        try { await fn(); } catch (e) { gl('Android', e.message); } finally { busy = false; btns.forEach(b => b && (b.disabled = false)); }
+    };
+    const $ = id => document.getElementById(id);
+
+    // Android section toolbar
+    const aStart = $('start-android-btn'), aStop = $('stop-android-btn');
+    if (aStart) aStart.onclick = guarded([aStart, aStop], () => startAllAndroid('AndroidNode', setAndroidStatus));
+    if (aStop) aStop.onclick = guarded([aStart, aStop], async () => {
+        setAndroidStatus('stopping...');
+        await stopAllAndroid('AndroidNode', $('stop-android-emus-chk').checked);
+        setAndroidStatus('stopped');
     });
-    on('stop-all-emulators-btn', async () => {
-        await forEachRunningAvd(async a => { const r = await emuApi('POST', '/api/emulator/stop', { avd: a.name }); gl('Emulator', `${a.name}: ${r.ok ? 'stopped' : (r.j.error || 'error')}`); });
-    });
-    on('wipe-android-nodes-btn', async () => {
+    const wipe = $('wipe-android-nodes-btn');
+    if (wipe) wipe.onclick = guarded([wipe], async () => {
         if (!confirm('Stop the node and delete the chain data on EVERY running emulator?')) return;
-        await forEachRunningAvd(async a => { const r = await androidNodeApi('POST', '/wipe', { avd: a.name }); gl('AndroidNode', `${a.name}: ${r.ok ? 'node data wiped' : (r.j.error || 'error')}`); });
+        for (const a of await runningAvds()) { const r = await androidNodeApi('POST', '/wipe', { avd: a.name }); gl('AndroidNode', `${a.name}: ${r.ok ? 'node data wiped' : (r.j.error || 'error')}`); }
+        setTimeout(refreshNetwork, 3000);
     });
 
     // + New AVD
-    const form = document.getElementById('new-avd-form');
-    const newBtn = document.getElementById('new-avd-btn');
+    const form = $('new-avd-form'), newBtn = $('new-avd-btn');
     if (form && newBtn) {
         newBtn.onclick = () => { form.style.display = form.style.display === 'none' ? 'flex' : 'none'; };
-        document.getElementById('new-avd-cancel-btn').onclick = () => { form.style.display = 'none'; };
-        document.getElementById('new-avd-create-btn').onclick = async () => {
-            const name = document.getElementById('new-avd-name').value.trim();
-            const dataSize = document.getElementById('new-avd-size').value.trim() || '8G';
+        $('new-avd-cancel-btn').onclick = () => { form.style.display = 'none'; };
+        $('new-avd-create-btn').onclick = async () => {
+            const name = $('new-avd-name').value.trim();
+            const dataSize = $('new-avd-size').value.trim() || '8G';
             const r = await emuApi('POST', '/api/emulator/create', { name, dataSize });
             gl('Emulator', r.ok ? `AVD ${name} created (start it with its Start button).` : `create AVD failed: ${r.j.error || 'error'}`);
-            if (r.ok) { form.style.display = 'none'; document.getElementById('new-avd-name').value = ''; refreshAndroidDevices(); }
+            if (r.ok) { form.style.display = 'none'; $('new-avd-name').value = ''; refreshAndroidDevices(); }
         };
     }
 
     // Global Clear All Logs delegates to the existing (hidden in Core) handler
-    const clearGlobal = document.getElementById('clear-logs-global-btn');
-    if (clearGlobal) clearGlobal.onclick = () => document.getElementById('clear-all-logs-btn').click();
+    const clearGlobal = $('clear-logs-global-btn');
+    if (clearGlobal) clearGlobal.onclick = () => $('clear-all-logs-btn').click();
 
-    // Start / Stop Everything
-    const status = document.getElementById('everything-status');
-    const setStatus = (t, cls = '') => { if (status) { status.textContent = t; status.className = 'net-chip ' + cls; } };
-    let busy = false;
-    const startBtn = document.getElementById('start-everything-btn');
-    const stopBtn = document.getElementById('stop-everything-btn');
+    // Start / Stop Everything = headless nodes (seed first) + the Android routine above
+    const startBtn = $('start-everything-btn'), stopBtn = $('stop-everything-btn');
     const tag = 'Everything';
-    if (startBtn) startBtn.onclick = async () => {
-        if (busy) return; busy = true; startBtn.disabled = stopBtn.disabled = true;
-        try {
-            // 1. Headless nodes, seed first: wait for node 1's RPC
-            setStatus('starting headless nodes...');
-            gl(tag, 'Starting the headless nodes...');
-            document.getElementById('start-all-btn').click();
-            const seedUp = await waitFor(async () => {
-                const r = await fetch('/api/nodes/1/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'status' }) }).then(x => x.json());
-                return r && r.status === true;
-            }, 90000, 3000);
-            if (!seedUp) { gl(tag, 'The seed (headless node 1) did not answer within 90 s: stopping here.'); setStatus('seed not up', 'bad'); return; }
-            gl(tag, 'Seed is up.');
-            // 2. Emulators
-            setStatus('starting emulators...');
-            const la = await emuApi('POST', '/api/emulator/launch-all', {});
-            if (!la.ok) { gl(tag, `launch-all failed: ${la.j.error || 'error'}`); setStatus('emulators failed', 'bad'); return; }
-            const wanted = la.j.avds.map(a => a.name);
-            gl(tag, `Emulators: ${wanted.length} AVD(s) (${la.j.avds.filter(a => a.plan === 'launch').length} to launch).`);
-            // 3. Per AVD: wait until it answers adb commands, then install/start the node
-            let failed = 0;
-            for (const name of wanted) {
-                setStatus(`waiting for ${name}...`);
-                const ready = await waitFor(async () => {
-                    const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
-                    return r.ok && r.j.running ? r.j : null;
-                }, 240000, 4000);
-                if (!ready) { failed++; gl(tag, `${name}: not ready within 4 min (skipped). If it crashed earlier, check for an "emulator closed unexpectedly" dialog.`); continue; }
-                setStatus(`starting node on ${name}...`);
-                if (!(await startAndroidNode(name, tag))) failed++;
-            }
-            // 4. Check that every Android node got the chain. The seed sends it once per host:port, and the
-            //    start picks a new random port, so a node at block 0 is retried once (new port) before warning.
-            setStatus('checking sync...');
-            const atBlock0 = async name => {
-                const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
-                return r.ok && r.j.nodeUp && !(r.j.block > 0);
-            };
-            const syncWait = name => waitFor(async () => !(await atBlock0(name)), 60000, 5000);
-            for (const name of wanted) {
-                if (await syncWait(name)) continue;
-                gl(tag, `${name}: still at block 0 after 60 s: restarting its node on a new port.`);
-                await startAndroidNode(name, tag, true);
-                if (await syncWait(name)) continue;
-                gl(tag, `${name}: still at block 0. See the README troubleshooting entry (the seed sends the chain once per address).`);
-                failed++;
-            }
-            setStatus(failed ? `started, ${failed} Android node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
-            gl(tag, failed ? `Done with ${failed} failure(s): see the lines above.` : 'Done. See the Network table for the sync state.');
-            setTimeout(refreshAndroidDevices, 1000); setTimeout(refreshNetwork, 15000); setTimeout(refreshNetwork, 40000);
-        } catch (e) { gl(tag, e.message); setStatus('error', 'bad'); }
-        finally { busy = false; startBtn.disabled = stopBtn.disabled = false; }
-    };
-    if (stopBtn) stopBtn.onclick = async () => {
-        if (busy) return; busy = true; startBtn.disabled = stopBtn.disabled = true;
-        try {
-            setStatus('stopping...');
-            const closeEmus = document.getElementById('stop-emulators-chk').checked;
-            const avds = await runningAvds().catch(() => []);
-            for (const a of avds) {
-                const r = await androidNodeApi('POST', '/stop', { avd: a.name });
-                gl(tag, `${a.name}: ${r.ok ? 'node stopped' : (r.j.error || 'error')}`);
-                if (closeEmus) { const e = await emuApi('POST', '/api/emulator/stop', { avd: a.name }); gl(tag, `${a.name}: ${e.ok ? 'emulator stopped' : (e.j.error || 'error')}`); }
-            }
-            gl(tag, 'Stopping the headless nodes...');
-            document.getElementById('stop-all-btn').click();
-            setStatus('stopped', '');
-            setTimeout(refreshAndroidDevices, 1500); setTimeout(refreshNetwork, 5000);
-        } catch (e) { gl(tag, e.message); setStatus('error', 'bad'); }
-        finally { busy = false; startBtn.disabled = stopBtn.disabled = false; }
-    };
+    if (startBtn) startBtn.onclick = guarded([startBtn, stopBtn], async () => {
+        setEverythingStatus('starting headless nodes...');
+        gl(tag, 'Starting the headless nodes...');
+        $('start-all-btn').click();
+        const seedUp = await waitFor(async () => {
+            const r = await fetch('/api/nodes/1/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'status' }) }).then(x => x.json());
+            return r && r.status === true;
+        }, 90000, 3000);
+        if (!seedUp) { gl(tag, 'The seed (headless node 1) did not answer within 90 s: stopping here.'); setEverythingStatus('seed not up', 'bad'); return; }
+        gl(tag, 'Seed is up.');
+        const failed = await startAllAndroid(tag, setEverythingStatus);
+        setEverythingStatus(failed ? `started, ${failed} Android node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
+    });
+    if (stopBtn) stopBtn.onclick = guarded([startBtn, stopBtn], async () => {
+        setEverythingStatus('stopping...');
+        await stopAllAndroid(tag, $('stop-emulators-chk').checked);
+        gl(tag, 'Stopping the headless nodes...');
+        $('stop-all-btn').click();
+        setEverythingStatus('stopped');
+    });
 });
 
 // ---- Test scenarios ----
