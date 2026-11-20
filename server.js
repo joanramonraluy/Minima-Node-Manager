@@ -9,15 +9,30 @@ const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+// Browsers send an Origin header on cross-site requests and on every WebSocket handshake. A page on
+// another site must not be able to drive this manager (start nodes, launch emulators, send commands),
+// so a request whose Origin host is not the host it was sent to is refused. No Origin = curl/scripts/
+// same-origin GET: allowed.
+function originAllowed(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    try { return new URL(origin).host === req.headers.host; } catch (e) { return false; }
+}
+const io = new Server(server, { allowRequest: (req, cb) => cb(null, originAllowed(req)) });
+app.use('/api', (req, res, next) => originAllowed(req) ? next() : res.status(403).json({ error: 'Cross-origin request refused' }));
+
+// Dev/test only: NODEMANAGER_DEV_NONROOT=1 lets the API and UI run without sudo (no network namespaces,
+// so nodes cannot start). PORT overrides the default 3000; NODEMANAGER_NO_BROWSER=1 skips the browser.
+const DEV_NONROOT = process.env.NODEMANAGER_DEV_NONROOT === '1';
 
 // Enforce Root Privileges
-if (process.getuid && process.getuid() !== 0) {
+if (!DEV_NONROOT && process.getuid && process.getuid() !== 0) {
     console.error('Error: server.js must be run as root (sudo node server.js)');
     process.exit(1);
 }
 
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 const NODE_COUNT = 26; // Support A-Z
 
 // Get the user who ran sudo
@@ -129,7 +144,7 @@ function getAdbEnv() {
     const adbEnv = { ...process.env };
     if (process.env.SUDO_USER) {
         adbEnv.HOME = `/home/${process.env.SUDO_USER}`;
-    } else {
+    } else if (process.getuid && process.getuid() === 0) {
         adbEnv.HOME = '/root';
     }
     return adbEnv;
@@ -1592,9 +1607,13 @@ server.listen(PORT, () => {
     console.log(`Remember to connect to: http://localhost:${PORT}`);
 
     // Auto Setup Network
-    console.log('Running Auto Network Setup...');
-    const setup = spawn('./scripts/setup_namespaces.sh');
-    setup.stderr.on('data', d => console.error(`[Network Setup Error] ${d.toString().trim()}`));
+    if (DEV_NONROOT) { console.log('NODEMANAGER_DEV_NONROOT=1: skipping network setup (nodes cannot start).'); }
+    else {
+        console.log('Running Auto Network Setup...');
+        const setup = spawn('./scripts/setup_namespaces.sh');
+        setup.stderr.on('data', d => console.error(`[Network Setup Error] ${d.toString().trim()}`));
+    }
+    if (DEV_NONROOT || process.env.NODEMANAGER_NO_BROWSER === '1') return;
 
     // Auto-open Browser
     const pEnv = process.env;
