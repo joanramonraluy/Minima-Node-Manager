@@ -229,11 +229,11 @@ The *Test scenarios* panel (Nodes tab, Core) runs scripts against the running ha
 
 ```json
 "testScenarios": [
-  { "id": "my-flow", "name": "My flow", "description": "optional", "cmd": ["python3", "-I", "/path/script.py", "--rpc", "http://10.0.0.11:9005"], "cwd": "/optional/dir" }
+  { "id": "my-flow", "name": "My flow", "description": "optional", "cmd": ["python3", "-I", "-u", "/path/script.py", "--rpc", "http://10.0.0.11:9005"], "cwd": "/optional/dir" }
 ]
 ```
 
-If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for its `docs/testing/tools/escrow_flow.py` are offered: the escrow/channel lifecycle on node 1 alone, and with the viewer on node 2 (both nodes must be running and synced; 29/29 checks pass on a private chain). The command line comes only from `config.json`, is spawned without a shell and runs as the desktop user (`SUDO_USER`). API: `GET /api/scenarios`, `POST /api/scenarios/run` and `/stop` with `{"id":"..."}`, `GET /api/scenarios/:id/output`.
+If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for its `docs/testing/tools/escrow_flow.py` are offered: the escrow/channel lifecycle on node 1 alone, and with the viewer on node 2 (both nodes must be running and synced; 29/29 checks pass on a private chain). The command line comes only from `config.json`, is spawned without a shell and runs as the desktop user (`SUDO_USER`). Use `python3 -u` for Python scripts, otherwise their output only appears when they finish. API: `GET /api/scenarios`, `POST /api/scenarios/run` and `/stop` with `{"id":"..."}`, `GET /api/scenarios/:id/output`.
 
 ### Android tools (ADB)
 
