@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Prints the state of the Core test bed (headless nodes + Android nodes) and whether they are on the same chain.
 // Usage: node scripts/testbed-status.js [--url http://localhost:3000] [--headless 2] [--json]
-// Exit code: 0 = at least 2 nodes up, same chain tip (within 2 blocks, no fork); 1 = anything else.
+// Exit code: 0 = at least 2 nodes up, same chain tip (within 2 blocks, no fork) and every node has a peer; 1 = anything else.
 // Read-only: it only calls GET /api/emulator/avds, GET /api/android-node/status and POST /api/nodes/:id/rpc {status}.
 // Needs Node 18+ (global fetch); no dependencies.
 const args = process.argv.slice(2);
@@ -45,7 +45,12 @@ const post = async (p, body) => (await fetch(BASE + p, { method: 'POST', headers
         const spread = Math.max(...up.map(r => r.block)) - Math.min(...up.map(r => r.block));
         if (fork) verdict = `FORK at block ${fork}`;
         else if (spread > 2) verdict = `NOT IN SYNC: blocks differ by ${spread} (a node may still be syncing; a fresh Android node stuck at block 0 is described in docs/TESTBED.md)`;
-        else { verdict = `IN SYNC (${up.length} nodes)`; ok = true; }
+        else {
+            // Same block and hash is not enough: a node with no peers just kept an old chain and is not connected
+            const lonely = up.filter(r => !(r.peers > 0));
+            if (lonely.length) verdict = `SAME TIP BUT NOT CONNECTED: ${lonely.map(r => r.name).join(', ')} ha${lonely.length > 1 ? 've' : 's'} 0 peers (just restarted? wait and run again)`;
+            else { verdict = `IN SYNC (${up.length} nodes)`; ok = true; }
+        }
     }
     if (asJson) console.log(JSON.stringify({ ok, verdict, nodes: rows }, null, 2));
     else {

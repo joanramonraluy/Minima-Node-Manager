@@ -27,7 +27,7 @@ Two facts that surprise people:
 node scripts/testbed-status.js            # from the Node Manager checkout; --headless N, --url, --json
 ```
 
-It lists every node (block, tip hash, peers) and ends with `IN SYNC (N nodes)`, `FORK at block X`, `NOT IN SYNC` or `FEWER THAN 2 NODES UP`. Exit code 0 only when at least two nodes are on the same chain tip. It is read-only. If it says the Node Manager is not reachable, ask the maintainer to start it (section 1).
+It lists every node (block, tip hash, peers) and ends with `IN SYNC (N nodes)`, `FORK at block X`, `NOT IN SYNC`, `SAME TIP BUT NOT CONNECTED` or `FEWER THAN 2 NODES UP`. Exit code 0 only when at least two nodes are on the same chain tip and every node has at least one peer (`SAME TIP BUT NOT CONNECTED` otherwise, for example right after a restart). It is read-only. If it says the Node Manager is not reachable, ask the maintainer to start it (section 1).
 
 The same information is in the UI: Nodes tab, **Network** table.
 

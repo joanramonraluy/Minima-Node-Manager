@@ -239,7 +239,7 @@ If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for
 
 ### Using the test bed from another project
 
-[docs/TESTBED.md](docs/TESTBED.md) is the guide for whoever *uses* the Core test bed (for example agents working in the MinimaAds repo): what can be done without sudo, the topology and addresses, an HTTP cheat sheet, how to run the escrow/channel scenarios, and the gotchas found so far. `node scripts/testbed-status.js` prints every node's block, tip hash and peers and exits 0 only when at least two nodes share the chain tip.
+[docs/TESTBED.md](docs/TESTBED.md) is the guide for whoever *uses* the Core test bed (for example agents working in the MinimaAds repo): what can be done without sudo, the topology and addresses, an HTTP cheat sheet, how to run the escrow/channel scenarios, and the gotchas found so far. `node scripts/testbed-status.js` prints every node's block, tip hash and peers and exits 0 only when at least two nodes share the chain tip and every node has a peer.
 
 ### Android tools (ADB)
 
