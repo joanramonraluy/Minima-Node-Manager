@@ -10,17 +10,17 @@ const os = require('os');
 const app = express();
 const server = http.createServer(app);
 
-// Browsers send an Origin header on cross-site requests and on every WebSocket handshake. A page on
-// another site must not be able to drive this manager (start nodes, launch emulators, send commands),
-// so a request whose Origin host is not the host it was sent to is refused. No Origin = curl/scripts/
-// same-origin GET: allowed.
-function originAllowed(req) {
-    const origin = req.headers.origin;
-    if (!origin) return true;
-    try { return new URL(origin).host === req.headers.host; } catch (e) { return false; }
-}
-const io = new Server(server, { allowRequest: (req, cb) => cb(null, originAllowed(req)) });
-app.use('/api', (req, res, next) => originAllowed(req) ? next() : res.status(403).json({ error: 'Cross-origin request refused' }));
+// Who may talk to the manager (see lib/request-guard.js): loopback Host header only (blocks DNS rebinding),
+// and no cross-site Origin. Applied to every HTTP request, static files included, and to the WebSocket handshake.
+const guard = require('./lib/request-guard');
+const allowedHosts = () => (typeof globalConfig !== 'undefined' && Array.isArray(globalConfig.allowedHosts)) ? globalConfig.allowedHosts : [];
+const requestAllowed = req => guard.hostAllowed(req, allowedHosts()) && guard.originAllowed(req);
+const io = new Server(server, { allowRequest: (req, cb) => cb(null, requestAllowed(req)) });
+app.use((req, res, next) => {
+    if (!guard.hostAllowed(req, allowedHosts())) return res.status(403).type('text/plain').send('Host not allowed. The Node Manager answers on localhost only (see allowedHosts in the README).');
+    next();
+});
+app.use('/api', (req, res, next) => guard.originAllowed(req) ? next() : res.status(403).json({ error: 'Cross-origin request refused' }));
 
 // Dev/test only: NODEMANAGER_DEV_NONROOT=1 lets the API and UI run without sudo (no network namespaces,
 // so nodes cannot start). PORT overrides the default 3000; NODEMANAGER_NO_BROWSER=1 skips the browser.
@@ -90,7 +90,9 @@ let globalConfig = {
     emulatorArgs: ['-gpu', 'host'], // -gpu host is required on some machines (SwiftShader segfaults)
     coreTestNodeApk: '', // CoreTestNode.apk (Android node); auto-detected in ./core/ or ../MinimaAds/docs/testing/tools/core-test-node/
     androidSeedHost: '10.0.0.11:9001', // desktop seed that Android nodes connect to
-    testScenarios: [] // [{id, name, description, cmd: [argv...], cwd}]; empty = auto-detect the MinimaAds escrow flow
+    testScenarios: [], // [{id, name, description, cmd: [argv...], cwd}]; empty = auto-detect the MinimaAds escrow flow
+    bindHost: '127.0.0.1', // where the server listens (127.0.0.1 = this computer only); NODEMANAGER_BIND overrides
+    allowedHosts: [] // extra Host header values accepted besides localhost/127.0.0.1/[::1] (only needed when bindHost is not loopback)
 };
 
 // Load Config from File
@@ -158,6 +160,8 @@ app.use(express.json());
 // Android emulator list/launch (AVDs; works in Classic and Core modes)
 const emulatorRouter = require('./lib/emulator')({ getConfig: () => globalConfig, getAdbEnv, log: (m) => io.emit('global-log', m + '\n') });
 app.use('/api/emulator', emulatorRouter);
+// HTTP start/stop of the headless nodes (Core mode): same actions as the Socket.IO events, for scripts and agents
+app.use('/api/nodes', require('./lib/nodes-http')({ isCoreMode, getConfig: () => globalConfig, nodeProcesses, startNode, stopNode, stopAll, nodeCount: NODE_COUNT }));
 // Test scenarios (scripts from config.json `testScenarios`, or the MinimaAds escrow flow if it is a sibling checkout)
 app.use('/api/scenarios', require('./lib/scenarios')({ getConfig: () => globalConfig, emit: (e, d) => io.emit(e, d), baseDir: __dirname }));
 // Minima Core node inside a running AVD (CoreTestNode); shares the AVD checks/locks of the emulator router
@@ -1605,8 +1609,10 @@ VITE_DEBUG_SESSION_ID=${sessionUid}
 
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+const BIND_HOST = guard.bindHost(globalConfig);
+server.listen(PORT, BIND_HOST, () => {
+    console.log(`Server running at http://localhost:${PORT} (listening on ${BIND_HOST})`);
+    if (!guard.isLoopback(BIND_HOST)) console.warn(`[Security] Listening on ${BIND_HOST}: other machines can reach this unauthenticated manager. Add the host names/IPs they use to allowedHosts in config.json, and use it only on a trusted network.`);
     console.log(`Remember to connect to: http://localhost:${PORT}`);
 
     // Auto Setup Network

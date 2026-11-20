@@ -4,7 +4,7 @@ Guidance for coding agents working on this repo. For what the project is and how
 
 ## Running and testing
 - The server needs `sudo` (network namespaces): `./nodemanager` runs `sudo node server.js` on http://localhost:3000. An agent cannot type the sudo password, so ask the user to start/restart it. Frontend files in `public/` are served from disk; backend changes need a restart.
-- No test runner is configured (`npm test` is a placeholder). The only tests are mocked ones: `node test/emulator.test.js`, `node test/android-node.test.js` and `node test/scenarios.test.js` (no adb/emulator/process is run).
+- No test runner is configured (`npm test` is a placeholder). The only tests are mocked ones: `node test/emulator.test.js`, `node test/android-node.test.js` and `node test/scenarios.test.js` and `node test/nodes-http.test.js` and `node test/request-guard.test.js` (no adb/emulator/process is run).
 - To exercise a new backend endpoint or the UI without sudo, run a second instance: `NODEMANAGER_DEV_NONROOT=1 NODEMANAGER_NO_BROWSER=1 PORT=3001 node server.js` (background; kill it when done). It talks to the real adb/emulators but cannot start nodes. Chrome's `javascript_exec` times out after 45 s: poll instead of sleeping long.
 - Check frontend JS syntax with `node --check public/app.js`.
 - Don't start or kill nodes, launch emulators or run `delete_*` / `kill_all_*` scripts unless the user asked: they act on the user's machine.
@@ -30,4 +30,5 @@ Guidance for coding agents working on this repo. For what the project is and how
 - Stopping a node that has just synced can lose blocks it had not saved; avoid pointless restarts of Android nodes.
 
 ## Security
-- The manager and its RPC listen on all interfaces without authentication: this is a test harness for an isolated machine. Don't add features that widen that exposure, and keep spawning processes with argument arrays, never shell strings.
+- The manager has no login: it listens on `127.0.0.1` only and `lib/request-guard.js` refuses any Host that is not loopback (or in `allowedHosts`) and any cross-site Origin, for HTTP, static files and Socket.IO. Don't loosen that, don't add a route that skips it, and keep spawning processes with argument arrays, never shell strings. The headless nodes' RPC (`10.0.0.1N:9005`, user `minima`, password `123`) is open inside the host on purpose: it is a test harness.
+- A request that works with `curl localhost:3000` fails with 403 if you use the machine's name or LAN address as the Host: use `localhost`.

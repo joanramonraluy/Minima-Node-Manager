@@ -13,13 +13,13 @@ This page is for whoever *uses* the test bed (for example an agent working in th
 | Run test scenarios | yes, HTTP (`/api/scenarios`) | |
 | Run `escrow_flow.py` directly against the nodes | yes | |
 | **Start / stop the Node Manager server** | no | **yes**: `./nodemanager` runs `sudo node server.js` and needs the password |
-| **Start / stop the headless nodes** | only through the UI (or a Socket.IO client) | the UI buttons *Start All Nodes* / *Start Everything* |
+| Start / stop the headless nodes | yes, HTTP (`/api/nodes/...start`, `.../stop`, `start-all`, `stop-all`) once the server runs | |
 | Backend code changes taking effect | no | restart the server |
 
 Two facts that surprise people:
 
 - **The headless Java nodes are children of the server.** Restarting the server stops them (and loses the in-memory logs). The emulators are detached and survive.
-- **There is no HTTP endpoint to start or stop headless nodes** (only Socket.IO events, which the UI uses). If you need that unattended, add one (suggested follow-up) or ask the maintainer to press *Start Everything*.
+- **Headless nodes can be started and stopped over HTTP** (section 4), but only while the server runs, and the server needs the maintainer. Android nodes and emulators have their own HTTP endpoints.
 
 ## 2. Is it up? One command
 
@@ -47,12 +47,18 @@ How they see each other:
 
 ## 4. Starting everything
 
-Ask the maintainer to press **Start Everything** (Nodes tab, top bar). It starts the headless nodes (seed first, waits for its RPC), opens the emulators, installs the node app where missing, starts each Android node joined to the seed (random port) and retries a node that stays at block 0. Then run `scripts/testbed-status.js`.
-
-Pieces, if you only need part of it:
+Ask the maintainer to press **Start Everything** (Nodes tab, top bar). It starts the headless nodes (seed first, waits for its RPC), opens the emulators, installs the node app where missing, starts each Android node joined to the seed (random port) and retries a node that stays at block 0. Then run `scripts/testbed-status.js`. If the server is already running you can do the pieces yourself:
 
 ```bash
 M=http://localhost:3000
+
+# Headless nodes (Core mode). Idempotent: a node that is already running is left alone
+curl -s $M/api/nodes                                                    # {"mode":"core","running":[1,2]}
+curl -s -X POST $M/api/nodes/start-all -H 'Content-Type: application/json' -d '{"count":2}'   # nodes 1..count, seed first (default 2)
+curl -s -X POST $M/api/nodes/1/start                                    # one node; add {"clean":true} ONLY to delete its chain and wallet
+curl -s -X POST $M/api/nodes/2/stop
+curl -s -X POST $M/api/nodes/stop-all
+
 
 # Emulators and Android nodes (all idempotent enough to repeat)
 curl -s $M/api/emulator/avds                                           # AVDs, running or not, with adb serials
@@ -65,7 +71,9 @@ curl -s -X POST $M/api/android-node/stop    -H 'Content-Type: application/json' 
 curl -s -X POST $M/api/android-node/wipe    -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2"}'   # deletes its chain
 ```
 
-`mode` is `connect` (join the seed: `-test -nop2p -connect 10.0.0.11:9001`) or `solo` (own private chain). The start picks a random `-port` (12001-12999); you can pass `"port"` but keep it different per node and per start (gotcha 1).
+The headless endpoints answer straight away; the nodes need a few seconds to boot (poll `scripts/testbed-status.js`). They work in Core mode only and need `coreJarPath`/`coreLibsPath` in `config.json` (409 with the reason otherwise). Starting the Android nodes before the seed is up works too, but the seed should be first.
+
+`mode` for an Android node is `connect` (join the seed: `-test -nop2p -connect 10.0.0.11:9001`) or `solo` (own private chain). The start picks a random `-port` (12001-12999); you can pass `"port"` but keep it different per node and per start (gotcha 1).
 
 ## 5. Talking to the nodes
 
@@ -122,8 +130,8 @@ Add your own scenario by listing it in `config.json`: see README, *Test scenario
 
 ## 8. Safety rules
 
-- Private test chains only. The RPC and the manager listen on all interfaces without authentication: do not expose port 3000 or the RPC ports outside this machine.
-- Do not run `kill_all_*`, `delete_*` scripts, *Delete All Data* or *Wipe All Node Data* unless asked: they destroy the chain the other tests rely on.
+- Private test chains only. The manager listens on `127.0.0.1` only and refuses any `Host` other than `localhost`/`127.0.0.1`/`[::1]`, so call it as `http://localhost:3000` (the machine's name or LAN address answers 403). It has no login: any process on this computer can use it. The headless RPC ports are open inside the host; do not expose them.
+- Do not pass `{"clean":true}` to a start, and do not run `kill_all_*`, `delete_*` scripts, *Delete All Data* or *Wipe All Node Data*, unless asked: they destroy the chain the other tests rely on.
 - Do not start or stop the maintainer's emulators or nodes just to look around; read state with `scripts/testbed-status.js`.
 - If you start something (a node, an emulator, a scenario), say what you left running when you finish.
 
@@ -134,7 +142,8 @@ Add your own scenario by listing it in `config.json`: see README, *Test scenario
 | Server, headless nodes, RPC proxy | `server.js`, `scripts/start_core_node.sh` |
 | Emulators, snapshots, create AVD | `lib/emulator.js` |
 | Android nodes (CoreTestNode) | `lib/android-node.js` |
+| HTTP start/stop of headless nodes | `lib/nodes-http.js` |
 | Scenarios | `lib/scenarios.js` |
 | UI for Core (network table, Start Everything, scenarios) | `public/android.js` |
-| Mocked tests | `test/*.test.js` (`node test/emulator.test.js`, `android-node`, `scenarios`) |
+| Mocked tests | `test/*.test.js` (`node test/emulator.test.js`, `android-node`, `scenarios`, `nodes-http`) |
 | Status script | `scripts/testbed-status.js` |

@@ -108,6 +108,7 @@ The application stores its settings in `config.json`. The file is **local and no
 Common keys:
 - **mode**: `"classic"` or `"core"`
 - **adbPath**: path to `adb`
+- **bindHost** (default `127.0.0.1`) and **allowedHosts** (default empty): see *Security* in the Core section
 - **ramLimit** / **cpuLimit**: default resource limits per node
 
 Classic keys (edited in the *Vite Server* tab and the Global Start Configuration):
@@ -244,9 +245,13 @@ If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for
 
 The *Android tools* tab (Core only) holds the ADB block: target device, APK install/uninstall, file push and its operations log.
 
-Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator/process is run): `node test/emulator.test.js`, `node test/android-node.test.js` and `node test/scenarios.test.js`.
+Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator/process is run): `node test/emulator.test.js`, `node test/android-node.test.js`, `node test/scenarios.test.js`, `node test/nodes-http.test.js` and `node test/request-guard.test.js`.
 
-**Security:** the Node Manager listens on all interfaces without authentication, so anyone who can reach port 3000 can launch emulators, send commands to Android nodes and run the configured scenarios as your user. Use it only on a trusted network. Requests and WebSocket handshakes that carry an `Origin` header for a different host than the one they were sent to are refused, so a web page on another site cannot drive the manager from your browser.
+**Security:** the Node Manager has no authentication, so it only listens on this computer and checks who is asking:
+- It listens on `127.0.0.1` (`bindHost` in `config.json`, or `NODEMANAGER_BIND`). Other machines on the network cannot reach it.
+- Every request, static files and the WebSocket handshake included, must carry a `Host` header of `localhost`, `127.0.0.1` or `[::1]`, or one listed in `allowedHosts`. This stops DNS rebinding, where a web page makes its own domain resolve to `127.0.0.1`.
+- A request with an `Origin` header for a different host than the one it was sent to is refused, so a web page on another site cannot drive the manager from your browser. `curl` and scripts send no `Origin` and are fine.
+- To use it from another machine you must set `bindHost` (for example `0.0.0.0`) and list the names or IPs you will type in `allowedHosts`; the server then warns at start-up. There is still no login: do that only on a network you trust. Any process on this computer can still call it.
 
 ## HTTP API (Debug & Automation)
 
@@ -254,6 +259,19 @@ Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names m
 > Aquesta és una API pensada exclusivament per a desenvolupament i depuració local (CLI, `curl`, scripts d'automatització). **No l'exposeu fora de `localhost`**, ja que no requereix autenticació.
 
 Permet consultar l'estat i executar comandes als nodes sense necessitat d'obrir la interfície web ni dependre de Socket.IO. Funciona en els dos modes; per als endpoints d'emuladors (només Core) vegeu [Android nodes](#android-nodes-emulators-and-coretestnode).
+
+### 0. Engegar i aturar nodes headless (només mode Core)
+Fa el mateix que els botons de la interfície (i els esdeveniments Socket.IO), per a scripts i agents. Un node que ja corre no es toca.
+
+```bash
+curl -s localhost:3000/api/nodes                                                 # {"mode":"core","running":[1,2]}
+curl -s -X POST localhost:3000/api/nodes/start-all -H 'Content-Type: application/json' -d '{"count":2}'   # 1..count, el seed primer (per defecte 2)
+curl -s -X POST localhost:3000/api/nodes/1/start                                 # un node; {"clean":true} ESBORRA la seva cadena i cartera
+curl -s -X POST localhost:3000/api/nodes/1/stop
+curl -s -X POST localhost:3000/api/nodes/stop-all
+```
+
+Ids 1-26. Responen a l'instant; els nodes triguen uns segons a arrencar. En mode Classic responen 409. Veure `docs/TESTBED.md`.
 
 ### 1. Consultar logs d'un node (Ring-Buffer)
 Retorna en **text pla** (`text/plain`) les últimes N línies capturades al buffer en memòria del node (fins a un màxim de 2000 línies retingudes):
@@ -324,6 +342,8 @@ MinimaNodeManager/
 ├── lib/
 │   ├── emulator.js        # Android emulator launcher/sessions (Core)
 │   ├── android-node.js    # Minima node inside an AVD, via CoreTestNode (Core)
+│   ├── nodes-http.js      # HTTP start/stop of the headless nodes (Core)
+│   ├── request-guard.js   # Host/Origin checks and the bind address
 │   └── scenarios.js       # Test scenarios runner (Core)
 ├── public/                # Frontend assets
 │   ├── index.html         # Main UI
