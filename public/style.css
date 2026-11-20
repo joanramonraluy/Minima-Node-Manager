@@ -1009,3 +1009,35 @@ input[type=number] {
 body[data-mode="core"] .classic-only { display: none !important; }
 body[data-mode="core"] .core-only { display: block; }
 body[data-mode="core"] .control-group.core-only { display: flex; align-items: center; }
+
+/* Nodes toolbar groups */
+.tab-toolbar { align-items: flex-end; gap: 12px 16px; padding: 14px 30px; }
+.tb-group { display: flex; flex-direction: column; gap: 4px; }
+.tb-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.6px; color: #888; }
+.tb-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tb-danger .btn { padding: 6px 10px; font-size: 0.78rem; }
+.tb-danger .tb-label { color: #c0392b; }
+.node-count-box { display: flex; align-items: center; background: #ddd; padding: 2px 10px; border-radius: 4px; border: 1px solid #999; }
+.node-count-box label { color: #000; margin-right: 5px; font-size: 0.85rem; font-weight: bold; }
+.node-count-box input { width: 48px; background: transparent; border: none; color: black; text-align: center; font-weight: bold; font-size: 1rem; outline: none; }
+.btn-add { background: #28a745; color: #fff; }
+
+/* Core-only tabs: hidden entirely in Classic */
+body:not([data-mode="core"]) .core-tab { display: none !important; }
+
+/* Core: node-type sections in the Nodes tab */
+.node-section { margin-bottom: 18px; }
+.node-section-header { display: flex; align-items: baseline; gap: 12px; margin: 6px 0 8px 0; }
+.node-section-header h3 { margin: 0; color: var(--accent-primary); font-size: 1rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.node-section-header small { color: #888; }
+.net-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.net-table th { text-align: left; color: #888; font-weight: normal; border-bottom: 1px solid var(--border-color); padding: 4px 8px; }
+.net-table td { padding: 5px 8px; border-bottom: 1px solid #222; font-family: monospace; }
+.net-note { display: block; color: #777; margin-top: 6px; }
+.net-chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; background: #333; color: #aaa; }
+.net-chip.ok { background: #1f5a2f; color: #8ce99a; }
+.net-chip.bad { background: #6b2323; color: #ffa8a8; }
+.anode { margin-top: 6px; padding: 6px 8px; border-left: 2px solid var(--accent-primary); background: #151515; font-size: 0.85rem; }
+.anode .anode-status { font-family: monospace; color: #aaa; margin-right: 8px; }
+.anode input.command-input, .anode select.command-input { width: auto; margin: 0 4px; }
+.anode pre { margin: 6px 0 0 0; max-height: 140px; overflow: auto; background: #000; color: #a6e3a1; padding: 6px; font-size: 0.75rem; white-space: pre-wrap; }

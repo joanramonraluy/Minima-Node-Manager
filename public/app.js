@@ -567,18 +567,20 @@ if (clearAllLogsBtn) {
     };
 }
 
+// Core: open every AVD that is not running yet (button in the Android nodes section; does not start nodes)
+const openAllEmulatorsBtn = document.getElementById('open-all-emulators-btn');
+if (openAllEmulatorsBtn) openAllEmulatorsBtn.onclick = () => {
+    fetch('/api/emulator/launch-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json()).then(j => {
+            if (j.error) { addToGlobalLog(`[Emulator] ${j.error}`); return; }
+            const todo = j.avds.filter(a => a.plan === 'launch').length;
+            addToGlobalLog(`[Emulator] Open All: ${todo} to launch, ${j.avds.length - todo} already running/starting (progress below).`);
+            setTimeout(refreshAndroidDevices, 4000);
+        }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
+};
+
+// Classic: open the MDS web UI of every running node
 document.getElementById('open-all-btn').onclick = () => {
-    // Core nodes have no web UI: "Open All" opens the Android emulators instead
-    if (window.nodeMode === 'core') {
-        fetch('/api/emulator/launch-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-            .then(r => r.json()).then(j => {
-                if (j.error) { addToGlobalLog(`[Emulator] ${j.error}`); return; }
-                const todo = j.avds.filter(a => a.plan === 'launch').length;
-                addToGlobalLog(`[Emulator] Open All: ${todo} to launch, ${j.avds.length - todo} already running/starting (progress below).`);
-                setTimeout(refreshAndroidDevices, 4000);
-            }).catch(e => addToGlobalLog(`[Emulator] ${e.message}`));
-        return;
-    }
     let opened = 0;
     // Determine loop range
     for (let i = 1; i <= visibleNodes; i++) {
@@ -639,11 +641,17 @@ function applyNodeMode(mode) {
     const changed = window.nodeMode !== m;
     window.nodeMode = m;
     document.body.dataset.mode = m;
-    const openAllBtn = document.getElementById('open-all-btn');
-    if (openAllBtn) {
-        openAllBtn.textContent = m === 'core' ? 'Open All Emulators' : 'Open All';
-        openAllBtn.title = m === 'core' ? 'Open all Android emulators (AVDs) that are not running yet' : 'Open the web UI of every running node';
-    }
+    const nodesLabel = document.getElementById('nodes-group-label');
+    if (nodesLabel) nodesLabel.textContent = m === 'core' ? 'Desktop nodes' : 'Nodes';
+    const startAllBtn = document.getElementById('start-all-btn');
+    if (startAllBtn) startAllBtn.title = m === 'core'
+        ? 'Start every Core node process on this computer (does NOT launch emulators or Android nodes)'
+        : 'Start every visible Classic node';
+    if (m === 'core' && typeof refreshNetwork === 'function') setTimeout(refreshNetwork, 300);
+    // The ADB/log block lives in dApp Manager (Classic) or the Emulators tab (Core)
+    const adbBlock = document.getElementById('android-mgmt-block');
+    const adbSlot = document.getElementById(m === 'core' ? 'emulators-adb-slot' : 'tab-dapps');
+    if (adbBlock && adbSlot && adbBlock.parentElement !== adbSlot) adbSlot.appendChild(adbBlock);
     const sel = document.getElementById('mode-select');
     if (sel) sel.value = m;
     if (changed) {
@@ -2244,6 +2252,9 @@ function buildAvdRow(avd, index) {
         name.onclick = () => emuLog(`[Emulator] ${avd.name} is already running (${avd.serial}).`);
     }
 
+    // Minima node inside the running emulator (CoreTestNode)
+    if (avd.running) li.appendChild(buildAndroidNodeBlock(avd, doAction));
+
     // Snapshots drawer
     const snapD = mk('details', {}, mk('summary', { textContent: 'Snapshots (sessions)' }));
     snapD.open = androidOpenDrawers.has(avd.name + ':snap');
@@ -2311,6 +2322,139 @@ function buildAvdRow(avd, index) {
     if (snapD.open) loadSnaps();
     return li;
 }
+
+
+// ---- Android node (CoreTestNode inside a running AVD) ----
+function androidNodeApi(method, path, body) {
+    return fetch('/api/android-node' + path, {
+        method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined
+    }).then(r => r.json().then(j => ({ ok: r.ok, j })));
+}
+
+function describeAndroidNode(st) {
+    if (!st.installed) return st.apk ? 'node app not installed' : 'node app not installed (CoreTestNode.apk not found: set coreTestNodeApk in config.json)';
+    if (!st.nodeUp) return 'node stopped';
+    return `node up - block ${st.block} - ${st.connected} peer(s) - port ${st.port}`;
+}
+
+function buildAndroidNodeBlock(avd, doAction) {
+    const box = mk('div', { className: 'anode' });
+    const status = mk('span', { className: 'anode-status', textContent: 'Minima node: checking...' });
+    const mode = mk('select', {}, mk('option', { value: 'connect', textContent: 'join desktop seed' }), mk('option', { value: 'solo', textContent: 'own chain (-solo)' }));
+    mode.className = 'command-input';
+    const install = mk('button', { textContent: 'Install node app', className: 'btn btn-small btn-neutral' });
+    const start = mk('button', { textContent: 'Start node', className: 'btn btn-small btn-primary' });
+    const stop = mk('button', { textContent: 'Stop node', className: 'btn btn-small btn-danger' });
+    const wipe = mk('button', { textContent: 'Wipe data', className: 'btn btn-small btn-danger', title: 'Stop the node and delete its chain (fresh chain next start)' });
+    const cmd = mk('input', { type: 'text', placeholder: 'minima command (e.g. status)' });
+    cmd.className = 'command-input'; cmd.style.cssText = 'width: 220px;';
+    const send = mk('button', { textContent: 'Send', className: 'btn btn-small btn-neutral' });
+    const out = mk('pre', { textContent: '' });
+    out.style.display = 'none';
+    const buttons = [install, start, stop, wipe, send];
+
+    function applyState(st) {
+        status.textContent = 'Minima node: ' + describeAndroidNode(st);
+        status.style.color = st.nodeUp ? '#40c057' : '#aaa';
+        install.style.display = st.installed ? 'none' : '';
+        [start, stop, wipe, mode, cmd, send].forEach(e => { e.style.display = st.installed ? '' : 'none'; });
+    }
+    function update() {
+        return androidNodeApi('GET', '/status?avd=' + encodeURIComponent(avd.name)).then(({ ok, j }) => {
+            if (!ok) { status.textContent = 'Minima node: ' + (j.error || 'error'); return; }
+            applyState(j);
+        }).catch(e => { status.textContent = 'Minima node: ' + e.message; });
+    }
+    function run(btn, path, body, okMsg) {
+        buttons.forEach(b => b.disabled = true);
+        status.textContent = 'Minima node: working...'; status.style.color = '#fab005';
+        return androidNodeApi('POST', path, body).then(({ ok, j }) => {
+            emuLog(ok ? `[AndroidNode] ${avd.name}: ${okMsg(j)}` : `[AndroidNode] ${avd.name}: ${j.error || 'error'}`);
+            return { ok, j };
+        }).catch(e => emuLog(`[AndroidNode] ${e.message}`)).finally(() => {
+            buttons.forEach(b => b.disabled = false);
+            // The node needs a moment to boot before it answers `status`
+            update(); setTimeout(update, 8000); setTimeout(update, 20000);
+            if (typeof refreshNetwork === 'function') setTimeout(refreshNetwork, 9000);
+        });
+    }
+    install.onclick = () => run(install, '/install', { avd: avd.name }, () => 'CoreTestNode installed');
+    start.onclick = () => run(start, '/start', { avd: avd.name, mode: mode.value }, j => `node starting (${j.params})`);
+    stop.onclick = () => run(stop, '/stop', { avd: avd.name }, () => 'node stopped');
+    wipe.onclick = () => { if (confirm(`Delete the chain data of the Android node on ${avd.name}?`)) run(wipe, '/wipe', { avd: avd.name }, () => 'node data wiped'); };
+    const sendFn = () => {
+        const c = cmd.value.trim();
+        if (!c) return;
+        out.style.display = ''; out.textContent = '> ' + c + '\n...';
+        androidNodeApi('POST', '/cmd', { avd: avd.name, command: c }).then(({ ok, j }) => {
+            out.textContent = '> ' + c + '\n' + (ok ? JSON.stringify(j.reply, null, 2) : (j.error || 'error'));
+        }).catch(e => { out.textContent = e.message; });
+    };
+    send.onclick = sendFn;
+    cmd.addEventListener('keydown', e => { if (e.key === 'Enter') sendFn(); });
+
+    box.append(status, install, mode, start, stop, wipe, mk('br'), cmd, send, out);
+    [start, stop, wipe, mode, cmd, send].forEach(e => { e.style.display = 'none'; });
+    update();
+    // Keep the status line fresh while this row is on screen (the row is rebuilt on refresh)
+    const timer = setInterval(() => { if (!document.body.contains(box)) { clearInterval(timer); return; } if (!document.hidden) update(); }, 15000);
+    return box;
+}
+
+// ---- Core: network overview (desktop + Android nodes) ----
+async function refreshNetwork() {
+    if (window.nodeMode !== 'core') return;
+    const rowsEl = document.getElementById('network-rows');
+    const chip = document.getElementById('network-sync');
+    if (!rowsEl) return;
+    const rows = [];
+    // Desktop nodes: the cards that show a running indicator
+    const cards = [...document.querySelectorAll('.node-card')].filter(c => c.querySelector('.status-indicator.running'));
+    await Promise.all(cards.map(async card => {
+        const id = card.id.replace('node-', '');
+        const row = { name: 'Desktop ' + id, type: 'desktop' + (id === '1' ? ' (seed)' : ''), where: `10.0.0.${10 + Number(id)}:9001`, block: null, peers: null, order: Number(id) };
+        try {
+            const r = await fetch(`/api/nodes/${id}/rpc`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'status' }) }).then(x => x.json());
+            const s = r.response || {};
+            row.block = s.chain && s.chain.block; row.peers = s.network && s.network.connected;
+        } catch (e) { /* RPC not up yet */ }
+        rows.push(row);
+    }));
+    // Android nodes: running AVDs with the node app
+    try {
+        const data = await fetch('/api/emulator/avds').then(r => r.json());
+        await Promise.all((data.avds || []).filter(a => a.running).map(async a => {
+            const row = { name: a.name, type: 'android', where: `${a.serial} (port 12001)`, block: null, peers: null, order: 100 };
+            try {
+                const st = await fetch('/api/android-node/status?avd=' + encodeURIComponent(a.name)).then(r => r.json());
+                if (st.nodeUp) { row.block = st.block; row.peers = st.connected; row.where = `${a.serial} (port ${st.port})`; }
+                else row.where += st.installed ? ' - node stopped' : ' - node app not installed';
+            } catch (e) { /* ignore */ }
+            rows.push(row);
+        }));
+    } catch (e) { /* adb/emulator unavailable */ }
+    rows.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    rowsEl.innerHTML = '';
+    if (!rows.length) rowsEl.appendChild(mk('tr', {}, mk('td', { colSpan: 5, textContent: 'No node is running.' })));
+    rows.forEach(r => rowsEl.appendChild(mk('tr', {},
+        mk('td', { textContent: r.name }), mk('td', { textContent: r.type }), mk('td', { textContent: r.where }),
+        mk('td', { textContent: r.block === null ? '-' : String(r.block) }), mk('td', { textContent: r.peers === null ? '-' : String(r.peers) }))));
+    const blocks = rows.map(r => r.block).filter(b => typeof b === 'number');
+    if (blocks.length < 2) { chip.textContent = blocks.length ? '1 node up' : 'no nodes'; chip.className = 'net-chip'; }
+    else {
+        const spread = Math.max(...blocks) - Math.min(...blocks);
+        chip.textContent = spread <= 2 ? `in sync (${blocks.length} nodes)` : `diverging: blocks differ by ${spread}`;
+        chip.className = 'net-chip ' + (spread <= 2 ? 'ok' : 'bad');
+    }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const b = document.getElementById('refresh-network-btn');
+    if (b) b.addEventListener('click', refreshNetwork);
+    setInterval(() => {
+        const nodesTab = document.getElementById('tab-nodes');
+        if (window.nodeMode === 'core' && !document.hidden && nodesTab && nodesTab.classList.contains('show')) refreshNetwork();
+    }, 15000);
+});
 
 function refreshAndroidDevices() {
     const avdList = document.getElementById('avd-list');

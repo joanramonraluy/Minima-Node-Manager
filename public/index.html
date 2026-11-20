@@ -27,7 +27,10 @@
                 <button class="topbar-link active" onclick="openTab(event, 'tab-nodes')">
                     <span class="icon">🖥️</span> Nodes
                 </button>
-                <button class="topbar-link" onclick="openTab(event, 'tab-dapps')">
+                <button class="topbar-link core-tab" onclick="openTab(event, 'tab-emulators')">
+                    <span class="icon">📱</span> Android tools
+                </button>
+                <button class="topbar-link classic-only" onclick="openTab(event, 'tab-dapps')">
                     <span class="icon">📦</span> dApp Manager
                 </button>
                 <button class="topbar-link classic-only" onclick="openTab(event, 'tab-build')">
@@ -49,47 +52,87 @@
             <!-- Tab Content: Nodes -->
             <div id="tab-nodes" class="tab-content show active">
                 <div class="tab-toolbar">
-                    <button id="start-all-btn" class="btn btn-primary">Start All</button>
-                    <button id="open-all-btn" class="btn btn-blue">Open All</button>
-
-                    <div
-                        style="display: flex; align-items: center; background: #ddd; padding: 2px 10px; border-radius: 4px; margin: 0 10px; border: 1px solid #999;">
-                        <label for="node-count-input"
-                            style="color: #000; margin-right: 5px; font-size: 0.9rem; font-weight: bold;">Nodes (Max
-                            26):</label>
-                        <input type="number" id="node-count-input" value="2" min="1" max="26"
-                            style="width: 70px; background: transparent; border: none; color: black; text-align: center; font-weight: bold; font-size: 1rem; outline: none;">
+                    <div class="tb-group">
+                        <span class="tb-label" id="nodes-group-label">Nodes</span>
+                        <div class="tb-row">
+                            <button id="start-all-btn" class="btn btn-primary">Start All Nodes</button>
+                            <button id="stop-all-btn" class="btn btn-danger">Stop All Nodes</button>
+                            <div class="node-count-box">
+                                <label for="node-count-input">Nodes (max 26):</label>
+                                <input type="number" id="node-count-input" value="2" min="1" max="26">
+                            </div>
+                            <button id="add-node-btn" class="btn btn-small btn-add">+ Add Node</button>
+                        </div>
                     </div>
-                    <button id="add-node-btn" class="btn btn-small" style="background: #28a745; color: white;">+ Add
-                        Node</button>
 
-                    <button id="stop-all-btn" class="btn btn-danger">Stop All</button>
-                    <button id="clear-all-logs-btn" class="btn btn-clear">Clear All Logs</button>
+                    <div class="tb-group classic-only">
+                        <span class="tb-label" id="open-all-label">Web UIs</span>
+                        <div class="tb-row">
+                            <button id="open-all-btn" class="btn btn-blue">Open All</button>
+                        </div>
+                    </div>
 
-                    <button id="toggle-view-btn" class="btn btn-secondary">Toggle View</button>
-                    <button id="kill-all-btn" class="btn btn-danger">Kill All Processes</button>
-                    <button id="delete-all-data-btn" class="btn btn-danger"
-                        title="DANGER: Delete ALL node data (irreversible)">⚠ DELETE ALL DATA ⚠</button>
+                    <div class="tb-group">
+                        <span class="tb-label">View</span>
+                        <div class="tb-row">
+                            <button id="clear-all-logs-btn" class="btn btn-clear">Clear All Logs</button>
+                            <button id="toggle-view-btn" class="btn btn-secondary">Toggle View</button>
+                        </div>
+                    </div>
+
+                    <div class="tb-group tb-danger">
+                        <span class="tb-label">Danger zone</span>
+                        <div class="tb-row">
+                            <button id="kill-all-btn" class="btn btn-danger"
+                                title="Force kill every node process">Kill All Processes</button>
+                            <button id="delete-all-data-btn" class="btn btn-danger"
+                                title="DANGER: Delete ALL node data (irreversible)">⚠ DELETE ALL DATA ⚠</button>
+                        </div>
+                    </div>
+
                     <button id="global-config-btn" class="btn btn-neutral" style="margin-left: auto;"
                         title="Global Start Configuration">⚙️</button>
                 </div>
 
                 <div class="nodes-scroll-area">
-                    <details class="inline-log-container" id="android-devices-panel">
-                        <summary class="log-header">Android Nodes (AVDs) - Start opens the emulator window</summary>
-                        <div style="padding: 8px;">
-                            <button id="refresh-android-devices-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
-                            <ul id="avd-list" style="list-style: none; padding: 0; margin: 8px 0 0 0;"></ul>
-                            <div style="color: #888; font-size: 0.8rem; margin-top: 8px;">ADB devices:</div>
-                            <ul id="adb-device-list-panel" style="list-style: none; padding: 0; margin: 4px 0 0 0;"></ul>
-                        </div>
-                    </details>
-
                     <details class="inline-log-container" open>
                         <summary class="log-header">Global System Log</summary>
                         <div id="system-log" class="global-log-instance"></div>
                     </details>
 
+                    <!-- Core: network overview (every node, desktop and Android) -->
+                    <section class="node-section core-tab" id="network-section">
+                        <div class="node-section-header">
+                            <h3>Network</h3>
+                            <span id="network-sync" class="net-chip">-</span>
+                            <button id="refresh-network-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
+                        </div>
+                        <table class="net-table">
+                            <thead><tr><th>Node</th><th>Type</th><th>Where</th><th>Block</th><th>Peers</th></tr></thead>
+                            <tbody id="network-rows"></tbody>
+                        </table>
+                        <small class="net-note">Android nodes join the chain by connecting to the desktop seed (node 1); desktop nodes cannot dial into an emulator.</small>
+                    </section>
+
+                    <!-- Core: Android nodes (emulator + CoreTestNode) -->
+                    <section class="node-section core-tab" id="android-nodes-section">
+                        <div class="node-section-header">
+                            <h3>Android nodes</h3>
+                            <button id="open-all-emulators-btn" class="btn btn-blue btn-small"
+                                title="Open all Android emulators (AVDs) that are not running yet. Does not start nodes.">Open All Emulators</button>
+                        </div>
+                        <details class="inline-log-container" id="android-devices-panel" open>
+                            <summary class="log-header">Emulators (AVDs) and their Minima node</summary>
+                            <div style="padding: 8px;">
+                                <button id="refresh-android-devices-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
+                                <ul id="avd-list" style="list-style: none; padding: 0; margin: 8px 0 0 0;"></ul>
+                                <div style="color: #888; font-size: 0.8rem; margin-top: 8px;">ADB devices:</div>
+                                <ul id="adb-device-list-panel" style="list-style: none; padding: 0; margin: 4px 0 0 0;"></ul>
+                            </div>
+                        </details>
+                    </section>
+
+                    <div class="node-section-header core-tab"><h3>Desktop nodes</h3><small>Java processes on this computer, no window</small></div>
                     <div class="grid list-view">
                         <!-- Node Templates Generated via JS to avoid duplication -->
                     </div>
@@ -243,6 +286,7 @@
                     </div>
                 </div>
 
+                <div id="android-mgmt-block">
                 <!-- SECTION: Android App / File Management -->
                 <div class="control-panel" style="margin-top: 20px;">
                     <h3>Android Management (ADB)</h3>
@@ -344,6 +388,14 @@
                 <div class="inline-log-container" style="margin-top: 20px;">
                     <div class="log-header">dApp & Android Operations Log</div>
                     <div id="dapp-log" class="terminal-output"></div>
+                </div>
+                            </div>
+            </div>
+
+            <!-- Tab Content: Android tools (Core only): ADB -->
+            <div id="tab-emulators" class="tab-content core-tab">
+                <div class="nodes-scroll-area">
+                    <div id="emulators-adb-slot"></div>
                 </div>
             </div>
 
