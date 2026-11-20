@@ -623,6 +623,32 @@ let globalConfig = {
     cpuLimit: 1
 };
 
+// Core: Overview / Headless nodes / Android nodes views of the Nodes tab
+function setCoreView(view) {
+    if (!['overview', 'headless', 'android'].includes(view)) view = 'overview';
+    document.body.dataset.view = view;
+    document.querySelectorAll('#core-subtabs .subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    try { localStorage.setItem('coreView', view); } catch (e) { /* storage may be blocked */ }
+}
+function setAndroidView(view) {
+    if (!['emulators', 'apps'].includes(view)) view = 'emulators';
+    document.body.dataset.aview = view;
+    document.querySelectorAll('#android-subtabs .subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.aview === view));
+    try { localStorage.setItem('androidView', view); } catch (e) { /* storage may be blocked */ }
+    if (view === 'apps' && typeof refreshApps === 'function') refreshApps();
+}
+(function initCoreView() {
+    let av = 'emulators';
+    try { av = localStorage.getItem('androidView') || av; } catch (e) { /* ignore */ }
+    document.body.dataset.aview = av;
+    document.querySelectorAll('#android-subtabs .subtab-btn').forEach(b => b.addEventListener('click', () => setAndroidView(b.dataset.aview)));
+    document.addEventListener('DOMContentLoaded', () => setAndroidView(document.body.dataset.aview));
+    let v = 'overview';
+    try { v = localStorage.getItem('coreView') || v; } catch (e) { /* ignore */ }
+    setCoreView(v);
+    document.querySelectorAll('#core-subtabs .subtab-btn').forEach(b => b.addEventListener('click', () => setCoreView(b.dataset.view)));
+})();
+
 // Listen for Config from Server
 function applyNodeMode(mode) {
     const m = mode === 'core' ? 'core' : 'classic';
@@ -636,7 +662,7 @@ function applyNodeMode(mode) {
         ? 'Start every Core node process on this computer (does NOT launch emulators or Android nodes)'
         : 'Start every visible Classic node';
     if (m === 'core' && typeof refreshNetwork === 'function') setTimeout(refreshNetwork, 300);
-    // The ADB/log block lives in dApp Manager (Classic) or the Emulators tab (Core)
+    // The ADB/log block lives in dApp Manager (Classic) or the Android nodes view (Core)
     const adbBlock = document.getElementById('android-mgmt-block');
     const adbSlot = document.getElementById(m === 'core' ? 'emulators-adb-slot' : 'tab-dapps');
     if (adbBlock && adbSlot && adbBlock.parentElement !== adbSlot) adbSlot.appendChild(adbBlock);

@@ -29,7 +29,7 @@ node scripts/testbed-status.js            # from the Node Manager checkout; --he
 
 It lists every node (block, tip hash, peers) and ends with `IN SYNC (N nodes)`, `FORK at block X`, `NOT IN SYNC`, `SAME TIP BUT NOT CONNECTED` or `FEWER THAN 2 NODES UP`. Exit code 0 only when at least two nodes are on the same chain tip and every node has at least one peer (`SAME TIP BUT NOT CONNECTED` otherwise, for example right after a restart). It is read-only. If it says the Node Manager is not reachable, ask the maintainer to start it (section 1).
 
-The same information is in the UI: Nodes tab, **Network** table.
+The same information is in the UI: Nodes tab, **Overview** view (the **Network** table), and the sync chip at the top right of the *Everything* bar. The Core Nodes tab has three views: *Overview* (Network, scenarios), *Headless nodes* and *Android nodes* (sub-views *Emulators* and *Apps (APK)*); a red dot on a view's tab means a node there is forked, behind or has no peers for two refreshes in a row.
 
 ## 3. Topology
 
@@ -47,7 +47,7 @@ How they see each other:
 
 ## 4. Starting everything
 
-Ask the maintainer to press **Start Everything** (Nodes tab, top bar). It starts the headless nodes (seed first, waits for its RPC), opens the emulators, installs the node app where missing, starts each Android node joined to the seed (random port) and retries a node that stays at block 0. Then run `scripts/testbed-status.js`. If the server is already running you can do the pieces yourself:
+Ask the maintainer to press **Start Everything** (Nodes tab, *Everything* bar, always visible). It starts the headless nodes (seed first, waits for its RPC), opens the emulators, installs the node app where missing, starts each Android node joined to the seed (random port) and retries a node that stays at block 0. Then run `scripts/testbed-status.js`. If the server is already running you can do the pieces yourself:
 
 ```bash
 M=http://localhost:3000
@@ -67,11 +67,15 @@ curl -s "$M/api/android-node/status?avd=Minima_Node_2"                 # install
 curl -s -X POST $M/api/android-node/install -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2"}'
 curl -s -X POST $M/api/android-node/start   -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2","mode":"connect"}'
 curl -s -X POST $M/api/android-node/cmd     -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2","command":"status"}'
+curl -s $M/api/android-node/apk                                      # the CoreTestNode.apk that install would push: path, size, mtime
+curl -s "$M/api/android-node/status?avd=Minima_Node_2&details=1"       # adds appVersion (may be "null") and appUpdated (install time)
 curl -s -X POST $M/api/android-node/stop    -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2"}'
 curl -s -X POST $M/api/android-node/wipe    -H 'Content-Type: application/json' -d '{"avd":"Minima_Node_2"}'   # deletes its chain
 ```
 
 The headless endpoints answer straight away; the nodes need a few seconds to boot (poll `scripts/testbed-status.js`). They work in Core mode only and need `coreJarPath`/`coreLibsPath` in `config.json` (409 with the reason otherwise). Starting the Android nodes before the seed is up works too, but the seed should be first.
+
+**Updating the node app.** `install` runs `adb install -r`, which keeps the chain and kills the node. To update a running node: `stop`, `install`, then `start` (new port). The UI does exactly that in *Android nodes > Apps (APK)* (*Update* per emulator or *Update All*, with *restart the nodes that were running*). `stop` asks the node to `quit` first (it replies "Shutdown complete" once the chain is saved) and only then force-stops the app; `androidNodeQuitWaitMs` in `config.json` (default 6000, `0` = force-stop only) bounds the wait.
 
 `mode` for an Android node is `connect` (join the seed: `-test -nop2p -connect 10.0.0.11:9001`) or `solo` (own private chain). The start picks a random `-port` (12001-12999); you can pass `"port"` but keep it different per node and per start (gotcha 1).
 
@@ -118,7 +122,7 @@ Add your own scenario by listing it in `config.json`: see README, *Test scenario
 ## 7. Gotchas (all hit while building this)
 
 1. **A node only sends the chain once per peer address.** Minima keeps an in-memory set of `host:port` it already sent the initial block download to, until it restarts. The emulators all reach the seed as `10.0.0.1:<port>`, so two Android nodes (or one that was wiped) on the **same port** never sync: they connect, show 1 peer and stay at block 0. The manager uses a random port on every start for this reason. Restarting the seed also clears the list.
-2. **Do not restart an Android node that has just synced**: blocks it has not saved yet are lost (it falls back a few blocks and re-syncs).
+2. **Avoid pointless restarts of an Android node that has just synced.** Stop and restart now go through `quit`, which saves the chain, so little is lost; a node that is force-stopped (no reply to `quit`) can still fall back a few blocks and re-sync.
 3. **A restarted server means no headless nodes** (they are its children), and the Android nodes lose their peer. *Start Everything* handles both; a node that is up with 0 peers is restarted on a new port.
 4. **Emulator storage.** An AVD with a full data partition cannot install the node app (`INSTALL_FAILED_INSUFFICIENT_STORAGE`). Create AVDs with 8 GB or more (*+ New AVD*, or `POST /api/emulator/create`).
 5. **The emulator needs `-gpu host`** on this machine (the default software renderer segfaults); the manager passes it (`emulatorArgs`).
@@ -131,7 +135,7 @@ Add your own scenario by listing it in `config.json`: see README, *Test scenario
 ## 8. Safety rules
 
 - Private test chains only. The manager listens on `127.0.0.1` only and refuses any `Host` other than `localhost`/`127.0.0.1`/`[::1]`, so call it as `http://localhost:3000` (the machine's name or LAN address answers 403). It has no login: any process on this computer can use it. The headless RPC ports are open inside the host; do not expose them.
-- Do not pass `{"clean":true}` to a start, and do not run `kill_all_*`, `delete_*` scripts, *Delete All Data* or *Wipe All Node Data*, unless asked: they destroy the chain the other tests rely on.
+- Do not pass `{"clean":true}` to a start, and do not run `kill_all_*`, `delete_*` scripts, *Delete All Data*, *Wipe All Node Data* or *Wipe Everything*, unless asked: they destroy the chain the other tests rely on.
 - Do not start or stop the maintainer's emulators or nodes just to look around; read state with `scripts/testbed-status.js`.
 - If you start something (a node, an emulator, a scenario), say what you left running when you finish.
 
@@ -144,6 +148,6 @@ Add your own scenario by listing it in `config.json`: see README, *Test scenario
 | Android nodes (CoreTestNode) | `lib/android-node.js` |
 | HTTP start/stop of headless nodes | `lib/nodes-http.js` |
 | Scenarios | `lib/scenarios.js` |
-| UI for Core (network table, Start Everything, scenarios) | `public/android.js` |
+| UI for Core (network table, Start/Stop/Wipe Everything, Apps (APK), scenarios) | `public/android.js`; the Overview / Headless / Android views in `public/app.js` (`setCoreView`, `setAndroidView`) |
 | Mocked tests | `test/*.test.js` (`node test/emulator.test.js`, `android-node`, `scenarios`, `nodes-http`) |
 | Status script | `scripts/testbed-status.js` |

@@ -158,7 +158,7 @@ function buildAndroidNodeBlock(avd, doAction) {
     const mode = mk('select', {}, mk('option', { value: 'connect', textContent: 'join desktop seed' }), mk('option', { value: 'solo', textContent: 'own chain (-solo)' }));
     mode.className = 'command-input';
     const install = mk('button', { textContent: 'Install node app', className: 'btn btn-small btn-neutral' });
-    const start = mk('button', { textContent: 'Start node', className: 'btn btn-small btn-primary' });
+    const start = mk('button', { textContent: 'Start / restart node', className: 'btn btn-small btn-primary', title: 'Starts the node, or restarts it (clean stop, new random port) when it is already running' });
     const stop = mk('button', { textContent: 'Stop node', className: 'btn btn-small btn-danger' });
     const wipe = mk('button', { textContent: 'Wipe data', className: 'btn btn-small btn-danger', title: 'Stop the node and delete its chain (fresh chain next start)' });
     const cmd = mk('input', { type: 'text', placeholder: 'minima command (e.g. status)' });
@@ -265,6 +265,19 @@ function networkVerdict(rows) {
     return spread <= 2 ? { text: `in sync (${up.length} nodes)`, cls: 'ok' } : { text: `not in sync: blocks differ by ${spread} (a node may still be syncing)`, cls: 'bad' };
 }
 
+let previousProblems = new Set();
+// Why a node that answers looks wrong (null when fine). The seed (headless 1) alone legitimately has no peers.
+function rowProblem(r, rows) {
+    if (typeof r.block !== 'number') return null;
+    const up = rows.filter(x => typeof x.block === 'number');
+    const max = Math.max(...up.map(x => x.block));
+    const sameHeightHashes = new Set(up.filter(x => x.block === r.block && x.hash).map(x => x.hash));
+    if (sameHeightHashes.size > 1) return `forked at block ${r.block}`;
+    if (up.length > 1 && max - r.block > 2) return `${max - r.block} blocks behind`;
+    if (r.peers === 0 && !r.type.includes('seed')) return 'no peers';
+    return null;
+}
+
 async function refreshNetwork() {
     if (window.nodeMode !== 'core') return;
     const rowsEl = document.getElementById('network-rows');
@@ -291,8 +304,30 @@ async function refreshNetwork() {
         tr.onclick = () => showPeers(!(tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains('net-peers')));
         if (networkExpanded.has(r.name)) showPeers(true);
     });
+    const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n ? `(${n} running)` : ''; };
+    setCount('subtab-count-headless', rows.filter(r => r.type.startsWith('headless')).length);
+    setCount('subtab-count-android', rows.filter(r => r.type === 'android').length);
     const v = networkVerdict(rows);
     chip.textContent = v.text; chip.className = 'net-chip ' + v.cls;
+    const gs = document.getElementById('global-sync');
+    if (gs) {
+        const up = rows.filter(r => typeof r.block === 'number');
+        gs.textContent = up.length ? `${v.text} - block ${Math.max(...up.map(r => r.block))}` : v.text;
+        gs.className = 'net-chip ' + v.cls;
+    }
+    // A problem must show up in two refreshes in a row (a node that has just started has no peers for a moment)
+    const problems = { headless: [], android: [] };
+    const nowSeen = new Set();
+    rows.forEach(r => {
+        const why = rowProblem(r, rows); if (!why) return;
+        const key = `${r.name}: ${why}`; nowSeen.add(key);
+        if (previousProblems.has(key)) problems[r.type.startsWith('headless') ? 'headless' : 'android'].push(key);
+    });
+    previousProblems = nowSeen;
+    for (const k of ['headless', 'android']) {
+        const dot = document.getElementById('subtab-alert-' + k);
+        if (dot) { dot.hidden = !problems[k].length; dot.title = problems[k].join('\n'); }
+    }
     return rows;
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -424,6 +459,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const $ = id => document.getElementById(id);
 
+    // Remember the "also close emulators" checkboxes between sessions (kept in sync with each other)
+    const closeChks = ['stop-emulators-chk', 'stop-android-emus-chk'].map($).filter(Boolean);
+    try { const saved = localStorage.getItem('closeEmulators') === '1'; closeChks.forEach(c => { c.checked = saved; }); } catch (e) { /* storage may be blocked */ }
+    closeChks.forEach(c => c.addEventListener('change', () => {
+        closeChks.forEach(o => { o.checked = c.checked; });
+        try { localStorage.setItem('closeEmulators', c.checked ? '1' : '0'); } catch (e) { /* ignore */ }
+    }));
+
     // Android section toolbar
     const aStart = $('start-android-btn'), aStop = $('stop-android-btn');
     if (aStart) aStart.onclick = guarded([aStart, aStop], () => startAllAndroid('AndroidNode', setAndroidStatus));
@@ -473,6 +516,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const failed = await startAllAndroid(tag, setEverythingStatus);
         setEverythingStatus(failed ? `started, ${failed} Android node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
     });
+    // Wipe Everything = wipe the Android nodes' chain + the headless nodes' data (one confirmation)
+    const wipeAllBtn = $('wipe-everything-btn');
+    if (wipeAllBtn) wipeAllBtn.onclick = guarded([startBtn, stopBtn, wipeAllBtn], async () => {
+        if (!confirm('Delete ALL node data: the chain of every Android node on a running emulator and the data of every headless node? This cannot be undone.')) return;
+        setEverythingStatus('wiping...');
+        for (const a of await runningAvds()) { const r = await androidNodeApi('POST', '/wipe', { avd: a.name }); gl(tag, `${a.name}: ${r.ok ? 'node data wiped' : (r.j.error || 'error')}`); }
+        gl(tag, 'Deleting the headless nodes data...');
+        $('delete-all-data-btn').click();
+        setEverythingStatus('wiped', 'ok');
+        setTimeout(refreshAndroidDevices, 1500); setTimeout(refreshNetwork, 5000);
+    });
     if (stopBtn) stopBtn.onclick = guarded([startBtn, stopBtn], async () => {
         setEverythingStatus('stopping...');
         await stopAllAndroid(tag, $('stop-emulators-chk').checked);
@@ -516,4 +570,68 @@ if (typeof socket !== 'undefined') {
 document.addEventListener('DOMContentLoaded', () => {
     const det = document.getElementById('scenarios-details');
     if (det) det.addEventListener('toggle', () => { if (det.open) refreshScenarios(); });
+});
+
+
+// ---- Android > Apps (APK): update the node app on the running emulators ----
+const fmtSize = b => (b / 1048576).toFixed(1) + ' MB';
+async function updateNodeApp(name, tag, restart) {
+    const st = (await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name))).j;
+    if (!st.running) { gl(tag, `${name}: emulator not running.`); return false; }
+    const wasUp = !!st.nodeUp;
+    if (wasUp) {
+        gl(tag, `${name}: stopping the node before updating...`);
+        const s = await androidNodeApi('POST', '/stop', { avd: name });
+        if (!s.ok) { gl(tag, `${name}: stop failed: ${s.j.error || 'error'}`); return false; }
+    }
+    gl(tag, `${name}: installing the APK...`);
+    const r = await androidNodeApi('POST', '/install', { avd: name });
+    if (!r.ok) { gl(tag, `${name}: update failed: ${r.j.error || 'error'}`); return false; }
+    gl(tag, `${name}: node app updated.`);
+    if (wasUp && restart) await startAndroidNode(name, tag, true);
+    return true;
+}
+
+async function refreshApps() {
+    if (window.nodeMode !== 'core') return;
+    const info = document.getElementById('apk-info'), rowsEl = document.getElementById('apps-rows');
+    if (!info || !rowsEl) return;
+    const apk = (await androidNodeApi('GET', '/apk').catch(() => ({ j: { found: false } }))).j;
+    info.textContent = apk.found ? `APK: ${apk.path} (${fmtSize(apk.size)}, built ${new Date(apk.mtime).toLocaleString()})` : 'CoreTestNode.apk not found: set coreTestNodeApk in config.json.';
+    const avds = await runningAvds().catch(() => []);
+    rowsEl.innerHTML = '';
+    if (!avds.length) rowsEl.appendChild(mk('tr', {}, mk('td', { colSpan: 4, textContent: 'No emulator is running.' })));
+    for (const a of avds) {
+        const st = (await androidNodeApi('GET', `/status?avd=${encodeURIComponent(a.name)}&details=1`).catch(() => ({ j: {} }))).j;
+        let installed = 'not installed', cls = '';
+        if (st.installed) {
+            installed = (st.appVersion && st.appVersion !== 'null' ? 'v' + st.appVersion : 'installed') + (st.appUpdated ? ` (${st.appUpdated})` : '');
+            if (apk.found && st.appUpdated && new Date(apk.mtime) > new Date(st.appUpdated.replace(' ', 'T'))) { installed += ' - APK is newer'; cls = 'apk-old'; } else cls = 'apk-ok';
+        }
+        const btn = mk('button', { textContent: st.installed ? 'Update' : 'Install', className: 'btn btn-small btn-primary', disabled: !apk.found });
+        btn.onclick = async () => {
+            btn.disabled = true;
+            try { await updateNodeApp(a.name, 'Apps', document.getElementById('update-restart-chk').checked); }
+            catch (e) { gl('Apps', `${a.name}: ${e.message}`); }
+            refreshApps(); refreshAndroidDevices();
+        };
+        rowsEl.appendChild(mk('tr', {}, mk('td', { textContent: a.name }), mk('td', { className: cls, textContent: installed }),
+            mk('td', { textContent: st.nodeUp ? `up - block ${st.block}` : 'stopped' }), mk('td', {}, btn)));
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const all = document.getElementById('update-apps-btn'), ref = document.getElementById('refresh-apps-btn');
+    const status = document.getElementById('apps-status');
+    if (ref) ref.onclick = refreshApps;
+    if (all) all.onclick = async () => {
+        all.disabled = true; status.textContent = 'updating...'; status.className = 'net-chip';
+        let failed = 0;
+        try {
+            const restart = document.getElementById('update-restart-chk').checked;
+            for (const a of await runningAvds()) { if (!(await updateNodeApp(a.name, 'Apps', restart))) failed++; }
+        } catch (e) { gl('Apps', e.message); failed++; }
+        status.textContent = failed ? `${failed} failed` : 'done'; status.className = 'net-chip ' + (failed ? 'bad' : 'ok');
+        all.disabled = false; refreshApps(); refreshAndroidDevices();
+    };
 });

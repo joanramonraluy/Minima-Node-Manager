@@ -27,9 +27,6 @@
                 <button class="topbar-link active" onclick="openTab(event, 'tab-nodes')">
                     <span class="icon">🖥️</span> Nodes
                 </button>
-                <button class="topbar-link core-tab" onclick="openTab(event, 'tab-emulators')">
-                    <span class="icon">📱</span> Android tools
-                </button>
                 <button class="topbar-link classic-only" onclick="openTab(event, 'tab-dapps')">
                     <span class="icon">📦</span> dApp Manager
                 </button>
@@ -67,7 +64,21 @@
                         <span class="tb-label">View</span>
                         <div class="tb-row"><button id="clear-logs-global-btn" class="btn btn-clear">Clear All Logs</button></div>
                     </div>
+                    <div class="tb-group tb-danger">
+                        <span class="tb-label">Danger zone</span>
+                        <div class="tb-row">
+                            <button id="wipe-everything-btn" class="btn btn-danger"
+                                title="Stops the Android nodes and deletes their chain, then deletes the data of every headless node (irreversible)">Wipe Everything</button>
+                        </div>
+                    </div>
                     <span id="everything-status" class="net-chip" style="align-self: center;"></span>
+                    <span id="global-sync" class="net-chip" style="align-self: center; margin-left: auto;" title="State of the chain across all running nodes (updates every 15 s)">-</span>
+                </div>
+                <!-- Core: views of the Nodes tab (the Everything bar above stays visible in all of them) -->
+                <div class="core-subtabs core-tab" id="core-subtabs">
+                    <button type="button" class="subtab-btn" data-view="overview">Overview</button>
+                    <button type="button" class="subtab-btn" data-view="headless">Headless nodes <span class="subtab-count" id="subtab-count-headless"></span><span class="subtab-alert" id="subtab-alert-headless" hidden>●</span></button>
+                    <button type="button" class="subtab-btn" data-view="android">Android nodes <span class="subtab-count" id="subtab-count-android"></span><span class="subtab-alert" id="subtab-alert-android" hidden>●</span></button>
                 </div>
                 <div class="tab-toolbar" id="nodes-toolbar">
                     <div class="tb-group">
@@ -113,13 +124,13 @@
                 </div>
 
                 <div class="nodes-scroll-area">
-                    <details class="inline-log-container" open>
+                    <details class="inline-log-container global-log-box" open>
                         <summary class="log-header">Global System Log</summary>
                         <div id="system-log" class="global-log-instance"></div>
                     </details>
 
                     <!-- Core: network overview (every node, desktop and Android) -->
-                    <section class="node-section core-tab" id="network-section">
+                    <section class="node-section core-tab view-overview" id="network-section">
                         <div class="node-section-header">
                             <h3>Network</h3>
                             <span id="network-sync" class="net-chip">-</span>
@@ -133,11 +144,15 @@
                     </section>
 
                     <!-- Core: Android nodes (emulator + CoreTestNode) -->
-                    <section class="node-section core-tab" id="android-nodes-section">
+                    <section class="node-section core-tab view-android" id="android-nodes-section">
                         <div class="node-section-header">
                             <h3>Android nodes</h3>
                         </div>
-                        <div class="tab-toolbar android-toolbar">
+                        <div class="core-subtabs android-subtabs" id="android-subtabs">
+                            <button type="button" class="subtab-btn" data-aview="emulators">Emulators</button>
+                            <button type="button" class="subtab-btn" data-aview="apps">Apps (APK)</button>
+                        </div>
+                        <div class="tab-toolbar android-toolbar asub-emulators">
                             <div class="tb-group">
                                 <span class="tb-label">Android nodes</span>
                                 <div class="tb-row">
@@ -157,14 +172,14 @@
                             </div>
                             <span id="android-status" class="net-chip" style="align-self: center;"></span>
                         </div>
-                        <div id="new-avd-form" class="new-avd-form" style="display: none;">
+                        <div id="new-avd-form" class="new-avd-form asub-emulators" style="display: none;">
                             <input type="text" id="new-avd-name" class="command-input" placeholder="AVD name (e.g. Minima_Node_3)" style="width: 220px;">
                             <input type="text" id="new-avd-size" class="command-input" value="8G" title="Internal storage" style="width: 70px;">
                             <button id="new-avd-create-btn" class="btn btn-small btn-primary">Create</button>
                             <button id="new-avd-cancel-btn" class="btn btn-small btn-neutral">Cancel</button>
                             <small>Clones the first existing AVD (same system image).</small>
                         </div>
-                        <details class="inline-log-container" id="android-devices-panel" open>
+                        <details class="inline-log-container asub-emulators" id="android-devices-panel" open>
                             <summary class="log-header">Emulators (AVDs) and their Minima node: each card has its own Start / Stop for the emulator and the node</summary>
                             <div style="padding: 8px;">
                                 <button id="refresh-android-devices-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
@@ -173,10 +188,26 @@
                                 <ul id="adb-device-list-panel" style="list-style: none; padding: 0; margin: 4px 0 0 0;"></ul>
                             </div>
                         </details>
+                        <div id="apps-panel" class="control-panel asub-apps">
+                            <h3>Node app (CoreTestNode)</h3>
+                            <div id="apk-info" class="apk-info">checking the APK...</div>
+                            <div class="tb-row" style="margin: 10px 0;">
+                                <button id="update-apps-btn" class="btn btn-primary" title="Installs the APK over the current app on every running emulator (the chain is kept)">Update All</button>
+                                <label class="checkbox-container" style="font-size: 0.8rem;"><input type="checkbox" id="update-restart-chk" checked> restart the nodes that were running</label>
+                                <button id="refresh-apps-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
+                                <span id="apps-status" class="net-chip"></span>
+                            </div>
+                            <table class="net-table">
+                                <thead><tr><th>Emulator</th><th>Installed</th><th>Node</th><th></th></tr></thead>
+                                <tbody id="apps-rows"></tbody>
+                            </table>
+                            <small class="net-note">Update stops the node cleanly, installs the APK over the old one (chain data is kept) and, if the box is ticked, starts the node again on a new port. "APK is newer" compares the APK file date with the install time on the emulator.</small>
+                        </div>
+                        <div id="emulators-adb-slot" class="asub-apps"></div>
                     </section>
 
                     <!-- Core: test scenarios against the harness -->
-                    <section class="node-section core-tab" id="scenarios-section">
+                    <section class="node-section core-tab view-overview" id="scenarios-section">
                         <details class="inline-log-container" id="scenarios-details">
                             <summary class="log-header">Test scenarios</summary>
                             <div style="padding: 8px;">
@@ -186,9 +217,9 @@
                         </details>
                     </section>
 
-                    <div class="node-section-header core-tab"><h3>Headless nodes</h3><small>Java processes on this computer, no window</small></div>
-                    <div id="headless-toolbar-slot"></div>
-                    <div class="grid list-view">
+                    <div class="node-section-header core-tab view-headless"><h3>Headless nodes</h3><small>Java processes on this computer, no window</small></div>
+                    <div id="headless-toolbar-slot" class="view-headless"></div>
+                    <div class="grid list-view view-headless">
                         <!-- Node Templates Generated via JS to avoid duplication -->
                     </div>
                 </div>
@@ -270,7 +301,7 @@
                     <div class="button-group">
                         <button id="start-vite-btn" class="btn btn-primary">Start Vite Server</button>
                         <button id="stop-vite-btn" class="btn btn-danger" disabled>Stop Vite</button>
-                        <button id="vite-build-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
+                        <button id="vite-build-btn" class="btn btn-neutral">Build
                             Project</button>
                         <button id="open-app-btn" class="btn btn-secondary" style="display:none;">Open App ↗</button>
                     </div>
@@ -322,7 +353,7 @@
                                 style="flex:1; min-width: 200px; max-width: 400px;">Install / Update from
                                 Location</button>
                             <button id="mobile-push-btn" class="btn btn-purple"
-                                style="flex:1; min-width: 200px; max-width: 400px; background-color: #f72585;">Push to
+                                style="flex:1; min-width: 200px; max-width: 400px">Push to
                                 Mobile
                                 (ADB)</button>
                         </div>
@@ -391,8 +422,8 @@
                             </div>
                         </div>
                         <div class="button-group" style="margin-top: 15px;">
-                            <button id="apk-install-btn" class="btn btn-green"
-                                style="background-color: #3ddc84; color: #000; flex: 1; max-width: 400px;">Install /
+                            <button id="apk-install-btn" class="btn btn-primary"
+                                style="flex: 1; max-width: 400px;">Install /
                                 Update APK</button>
                         </div>
 
@@ -430,7 +461,7 @@
                         <div class="input-group">
                             <input type="text" id="adb-push-remote-input" class="command-input"
                                 value="/sdcard/Download/" placeholder="/sdcard/Download/">
-                            <button id="adb-push-btn" class="btn btn-purple" style="background-color: #7209b7;">Push
+                            <button id="adb-push-btn" class="btn btn-neutral">Push
                                 File</button>
                         </div>
                     </div>
@@ -445,13 +476,6 @@
                     <div id="dapp-log" class="terminal-output"></div>
                 </div>
                             </div>
-            </div>
-
-            <!-- Tab Content: Android tools (Core only): ADB -->
-            <div id="tab-emulators" class="tab-content core-tab">
-                <div class="nodes-scroll-area">
-                    <div id="emulators-adb-slot"></div>
-                </div>
             </div>
 
             <!-- Tab Content: Build & Zip -->
@@ -479,13 +503,11 @@
                         into a <code>.mds</code> file and installs it directly to all running local nodes. No build step — use this for plain JS MiniDapps.
                     </p>
                     <div class="button-group">
-                        <button id="build-zip-btn" class="btn btn-purple" style="background-color: #7209b7;">Build
+                        <button id="build-zip-btn" class="btn btn-neutral">Build
                             & Zip</button>
-                        <button id="build-android-btn" class="btn btn-green"
-                            style="background-color: #3ddc84; color: #000;">Build Android APK</button>
-                        <button id="build-full-btn" class="btn btn-blue"
-                            style="background-color: #3a86ff; color: #fff;">Build All (Zip + APK)</button>
-                        <button id="zip-install-btn" class="btn" style="background-color: #f77f00; color: #fff;">Zip &amp; Install to Nodes</button>
+                        <button id="build-android-btn" class="btn btn-neutral">Build Android APK</button>
+                        <button id="build-full-btn" class="btn btn-primary">Build All (Zip + APK)</button>
+                        <button id="zip-install-btn" class="btn btn-neutral">Zip &amp; Install to Nodes</button>
                     </div>
                     <div class="build-output-container">
                         <div class="output-header">

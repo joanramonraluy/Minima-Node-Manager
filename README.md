@@ -127,7 +127,7 @@ The mode selector (**Classic / MDS** or **Core 1.1**) and the tabs available for
 | Tab | Classic | Core |
 |---|---|---|
 | Nodes | Yes | Yes |
-| Android tools (ADB) | - | Yes |
+| Android nodes view (incl. ADB tools) | - | Yes |
 | dApp Manager | Yes | - |
 | Build Pipeline | Yes | - |
 | Vite Server | Yes | - |
@@ -179,7 +179,7 @@ Core nodes are plain Java processes started in the same namespaces and IPs as Cl
 ### What changes in Core mode
 - Nodes are started by `scripts/start_core_node.sh` with `java -cp <jar>:<libs> org.minima.Minima -data nodes-core/nodeN -dbpassword ... -port 9001 -host <ip> -rpccrlf` (`-rpccrlf` makes Core's RPC send CRLF headers, which Node's HTTP client requires). Node 1 uses `-solo` (private chain, creates genesis); the others use `-test -nop2p -connect 10.0.0.11:9001`. The per-node *Clean* checkbox adds `-clean`.
 - Core has no RPC by default: once the process is running the manager sends `rpc enable:true password:123` over stdin (retrying until `status` answers), so RPC is on `10.0.0.1N:9005` (port + 4, user `minima`, password `123`, plain HTTP: Core has no HTTPS RPC). **The RPC listens on all interfaces with write access: this is a test harness, do not use it outside an isolated machine.**
-- Core has no MDS or Maxima: the *dApp Manager*, *Build Pipeline* and *Vite Server* tabs, host-network mode, genesis/connect/advanced MDS flags, auto Maxima name and peer sync are hidden. Node logs, the per-node command console and the Android tools remain.
+- Core has no MDS or Maxima: the *dApp Manager*, *Build Pipeline* and *Vite Server* tabs, host-network mode, genesis/connect/advanced MDS flags, auto Maxima name and peer sync are hidden. Node logs, the per-node command console and the Android tools (inside *Android nodes*) remain.
 - The ADB default package name becomes `org.minima.core` (switching mode swaps it if it was still the other mode's default). Commands to a phone are not implemented (Core on Android only exposes IPC `minimaapi`, not RPC).
 - Core mode uses `stop_core_node.sh`, `kill_all_core_nodes.sh` and `delete_core_node_data.sh`; none of them touches `nodes/`.
 
@@ -243,7 +243,7 @@ If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for
 
 ### Android tools (ADB)
 
-The *Android tools* tab (Core only) holds the ADB block: target device, APK install/uninstall, file push and its operations log.
+The *Android nodes* view of the Nodes tab (Core only) has two sub-views: *Emulators* (the cards) and *Apps (APK)*, which updates CoreTestNode on the running emulators and holds the ADB block: target device, APK install/uninstall, file push and its operations log.
 
 Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator/process is run): `node test/emulator.test.js`, `node test/android-node.test.js`, `node test/scenarios.test.js`, `node test/nodes-http.test.js` and `node test/request-guard.test.js`.
 
