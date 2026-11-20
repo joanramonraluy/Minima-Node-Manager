@@ -26,7 +26,7 @@ async function run(cmd, args) {
     if (m) { st.lastId = m[1]; st.lastCmd = m[2]; return 'Broadcast completed\n'; }
     if (/logcat -d -s CoreTestNode/.test(a)) {
         if (!st.nodeUp || !st.lastId) return '';
-        const body = JSON.stringify({ command: 'status', status: true, response: { version: '1.1.2', chain: { block: 306 }, network: { connected: 1, port: 12001 }, uptime: '1m' } });
+        const body = JSON.stringify({ command: 'status', status: true, response: { version: '1.1.2', chain: { block: 306, hash: '0xABC' }, network: { connected: 1, port: 12001 }, uptime: '1m' } });
         const half = Math.floor(body.length / 2);
         return `11-20 14:00 I CoreTestNode: RESULT ${st.lastId} 2/2 ${body.slice(half)}\n11-20 14:00 I CoreTestNode: RESULT ${st.lastId} 1/2 ${body.slice(0, half)}\n`;
     }
@@ -66,7 +66,7 @@ const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => 
 
     await post('/start', { avd: 'Phone_A' });
     r = await get('/status?avd=Phone_A');
-    assert.deepEqual([r.j.nodeUp, r.j.block, r.j.connected, r.j.port], [true, 306, 1, 12001]); ok('status parses a chunked reply (out of order)');
+    assert.deepEqual([r.j.nodeUp, r.j.block, r.j.connected, r.j.port, r.j.hash], [true, 306, 1, 12001, '0xABC']); ok('status parses a chunked reply (out of order)');
 
     r = await post('/cmd', { avd: 'Phone_A', command: "send address:Mx'1" }); assert.equal(r.s, 200);
     assert.equal(st.lastCmd, "send address:Mx'\\''1"); ok('single quote escaped for the device shell');

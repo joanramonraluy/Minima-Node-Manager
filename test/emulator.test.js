@@ -107,6 +107,20 @@ const router = require('../lib/emulator')({
     r = await post('/stop', { avd: 'Run_AVD' }); assert.equal(r.s, 409); ok('stop non-running 409');
     r = await post('/stop', { avd: 'Run_AVD', saveAs: '../x' }); assert.equal(r.s, 400); ok('stop bad snapshot name 400');
 
+    // create an AVD from a template (files only, no avdmanager)
+    fs.mkdirSync(path.join(avdRoot, 'Run_AVD.avd'), { recursive: true });
+    fs.writeFileSync(path.join(avdRoot, 'Run_AVD.ini'), `avd.ini.encoding=UTF-8\npath=${path.join(avdRoot, 'Run_AVD.avd')}\npath.rel=avd/Run_AVD.avd\ntarget=android-36.1\n`);
+    fs.writeFileSync(path.join(avdRoot, 'Run_AVD.avd', 'config.ini'), 'AvdId=Run_AVD\navd.ini.displayname=Run AVD\ndisk.dataPartition.size=6G\nhw.device.hash2=MD5:abc\nhw.ramSize=2048\n');
+    r = await post('/create', { name: 'New_Node_3', template: 'Run_AVD', dataSize: '9G' }); assert.equal(r.s, 200);
+    const newCfg = fs.readFileSync(path.join(avdRoot, 'New_Node_3.avd', 'config.ini'), 'utf8');
+    assert.ok(/^AvdId=New_Node_3$/m.test(newCfg) && /^disk\.dataPartition\.size=9G$/m.test(newCfg) && /^avd\.ini\.displayname=New Node 3$/m.test(newCfg) && !/hash2/.test(newCfg) && /hw\.ramSize=2048/.test(newCfg)); ok('create clones the template config');
+    const newIni = fs.readFileSync(path.join(avdRoot, 'New_Node_3.ini'), 'utf8');
+    assert.ok(newIni.includes(`path=${path.join(avdRoot, 'New_Node_3.avd')}`) && newIni.includes('target=android-36.1')); ok('create writes the .ini');
+    r = await post('/create', { name: 'Run_AVD' }); assert.equal(r.s, 409); ok('create refuses an existing name');
+    r = await post('/create', { name: '../evil' }); assert.equal(r.s, 400); ok('create refuses a bad name');
+    r = await post('/create', { name: 'Fine', dataSize: '8G; rm' }); assert.equal(r.s, 400); ok('create refuses a bad size');
+    r = await post('/create', { name: 'Fine2', template: 'Nope' }); assert.equal(r.s, 404); ok('create refuses an unknown template');
+
     // every adb/emulator call is an argv array with no shell metacharacters from client input
     assert.ok(!state.calls.some(c => c.join(' ').includes(';'))); ok('no injected metacharacters');
     srv.close(); fs.rmSync(tmp, { recursive: true, force: true });
