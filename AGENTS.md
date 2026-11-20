@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents working on this repo. For what the project is and how to use it, see [README.md](README.md).
+Guidance for coding agents working on this repo. For what the project is and how to use it, see [README.md](README.md). Agents that only *use* the Core test bed (for example from the MinimaAds repo) need [docs/TESTBED.md](docs/TESTBED.md) instead; keep that guide accurate when you change an API, a port, a button the guide mentions or a gotcha.
 
 ## Running and testing
 - The server needs `sudo` (network namespaces): `./nodemanager` runs `sudo node server.js` on http://localhost:3000. An agent cannot type the sudo password, so ask the user to start/restart it. Frontend files in `public/` are served from disk; backend changes need a restart.

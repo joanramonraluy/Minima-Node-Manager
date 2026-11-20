@@ -236,6 +236,10 @@ The *Test scenarios* panel (Nodes tab, Core) runs scripts against the running ha
 
 If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for its `docs/testing/tools/escrow_flow.py` are offered: the escrow/channel lifecycle on node 1 alone, and with the viewer on node 2 (both nodes must be running and synced; 29/29 checks pass on a private chain). The command line comes only from `config.json`, is spawned without a shell and runs as the desktop user (`SUDO_USER`). Use `python3 -u` for Python scripts, otherwise their output only appears when they finish. API: `GET /api/scenarios`, `POST /api/scenarios/run` and `/stop` with `{"id":"..."}`, `GET /api/scenarios/:id/output`.
 
+### Using the test bed from another project
+
+[docs/TESTBED.md](docs/TESTBED.md) is the guide for whoever *uses* the Core test bed (for example agents working in the MinimaAds repo): what can be done without sudo, the topology and addresses, an HTTP cheat sheet, how to run the escrow/channel scenarios, and the gotchas found so far. `node scripts/testbed-status.js` prints every node's block, tip hash and peers and exits 0 only when at least two nodes share the chain tip.
+
 ### Android tools (ADB)
 
 The *Android tools* tab (Core only) holds the ADB block: target device, APK install/uninstall, file push and its operations log.
@@ -333,8 +337,10 @@ MinimaNodeManager/
 │   ├── start_core_node.sh # Start individual node (Core mode)
 │   ├── stop_node.sh       # Stop individual node (Classic)
 │   ├── stop_core_node.sh  # Stop individual node (Core mode)
+│   ├── testbed-status.js  # Read-only test bed status (nodes, blocks, tip hashes, sync verdict)
 │   ├── disconnect_node.sh # Disconnect node from network
 │   └── reconnect_node.sh  # Reconnect node to network
+├── docs/TESTBED.md        # Guide for using the Core test bed from other projects
 ├── nodes/                 # Classic node data
 ├── nodes-core/            # Core node data
 ├── config.example.json    # Template for config.json
