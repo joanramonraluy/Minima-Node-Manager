@@ -1041,3 +1041,22 @@ body:not([data-mode="core"]) .core-tab { display: none !important; }
 .anode .anode-status { font-family: monospace; color: #aaa; margin-right: 8px; }
 .anode input.command-input, .anode select.command-input { width: auto; margin: 0 4px; }
 .anode pre { margin: 6px 0 0 0; max-height: 140px; overflow: auto; background: #000; color: #a6e3a1; padding: 6px; font-size: 0.75rem; white-space: pre-wrap; }
+
+/* Toolbars inside a node section (Core): no full-width bar chrome */
+.node-section .tab-toolbar, #headless-toolbar-slot .tab-toolbar { padding: 6px 0 10px 0; border-bottom: none; background: transparent; }
+.new-avd-form { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px 0; }
+.new-avd-form small { color: #888; }
+.avd-card { margin: 8px 0; padding: 8px 10px; background: #1a1a1a; border-radius: 6px; border: 1px solid var(--border-color); }
+.avd-name { color: #74c0fc; cursor: pointer; font-weight: bold; }
+.avd-state { margin: 0 8px; }
+.avd-state.on { color: #40c057; }
+.avd-state.off { color: #888; }
+.net-table tr.net-row { cursor: pointer; }
+.net-table tr.net-row:hover td { background: #1b1b1b; }
+.net-peers td { background: #111; color: #aaa; font-size: 0.8rem; }
+.net-hash { color: #888; }
+.scenario { margin: 6px 0; }
+.scenario .scenario-desc { color: #888; font-size: 0.8rem; margin-left: 8px; }
+.scenario-output { margin: 8px 0 0 0; max-height: 280px; overflow: auto; background: #000; color: #a6e3a1; padding: 8px; font-size: 0.78rem; white-space: pre-wrap; }
+
+.net-chip:empty { display: none; }

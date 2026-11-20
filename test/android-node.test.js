@@ -19,7 +19,7 @@ async function run(cmd, args) {
     if (a === 'devices') return 'List of devices attached\nemulator-5554\tdevice\n';
     if (/emu avd name$/.test(a)) return 'Phone_A\nOK\n';
     if (/pm list packages/.test(a)) return st.installed ? 'package:org.minima.coretestnode\n' : '';
-    if (/ install -r /.test(' ' + a)) { st.installed = true; return 'Success\n'; }
+    if (/ install -r /.test(' ' + a)) { if (st.installFail) throw new Error('Exception occurred while executing install:\nandroid.os.ParcelableException: java.io.IOException: x\n\tat a.b(C.java:1)\nCaused by: java.io.IOException: Requested internal only, but not enough space\n\tat d.e(F.java:2)'); st.installed = true; return 'Success\n'; }
     if (/force-stop|pm clear/.test(a)) { st.nodeUp = false; return ''; }
     if (/start-foreground-service/.test(a)) { st.nodeUp = true; return 'Starting service\n'; }
     let m = a.match(/am broadcast .* --es id (\S+) --es cmd '(.*)'$/);
@@ -52,6 +52,10 @@ const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => 
 
     r = await post('/start', { avd: 'Phone_A' }); assert.equal(r.s, 409); ok('start refused before install');
     r = await post('/install', { avd: 'Phone_B' }); assert.equal(r.s, 409); ok('install refused for a stopped AVD');
+    st.installFail = true;
+    r = await post('/install', { avd: 'Phone_A' }); assert.equal(r.s, 502);
+    assert.equal(r.j.error, 'install failed: Caused by: java.io.IOException: Requested internal only, but not enough space'); ok('install failure is reduced to one line');
+    st.installFail = false;
     r = await post('/install', { avd: 'Phone_A' }); assert.equal(r.s, 200);
     assert.ok(st.calls.some(c => c === `-s emulator-5554 install -r ${apk}`)); ok('install uses the serial from adb devices');
 

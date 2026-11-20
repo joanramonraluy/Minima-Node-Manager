@@ -131,24 +131,16 @@ The mode selector (**Classic / MDS** or **Core 1.1**) and the tabs available for
 | Build Pipeline | Yes | - |
 | Vite Server | Yes | - |
 
-### Nodes tab toolbar
-The toolbar is split into labelled groups:
+### Nodes tab
+- **Classic**: a toolbar with *Start All Nodes*, *Stop All Nodes*, the node counter and *+ Add Node*; *Open All* (web UI of every running node); *Clear All Logs* and *Toggle View*; and a danger zone (*Kill All Processes*, *Delete All Data*). The gear opens the **Global Start Configuration**. Below: the global system log and one card per node (start command preview, Start/Stop, logs, command box, per-node network and delete-data buttons).
+- **Core** is organised by node type, because the two kinds of node behave differently:
+  - **Everything** bar: *Start Everything* (headless nodes, waiting for the seed's RPC, then the emulators, then the node app on each Android node, joined to the seed), *Stop Everything* (Android nodes, then headless nodes; tick *also close emulators* to close them too) and *Clear All Logs*.
+  - **Network**: one table with every running node (headless and Android): block, tip hash and peers. Click a row to list that node's peers. The indicator says *in sync*, *diverging* (blocks differ by more than 2) or *FORK* (same block, different tip hash).
+  - **Android nodes**: its own toolbar (*Open All Emulators*, *Stop All Emulators*, *+ New AVD*; *Start All Nodes*, *Stop All Nodes*; danger zone *Wipe All Node Data*) and one card per AVD (see [Android nodes](#android-nodes-emulators-and-coretestnode)).
+  - **Test scenarios**: runs the scripts configured in `testScenarios` and shows their output (see [Test scenarios](#test-scenarios)).
+  - **Headless nodes**: the node cards plus their toolbar (*Start All Nodes*, *Stop All Nodes*, counter, *+ Add Node*, *Toggle View*, *Kill All Processes*, *Delete All Data*). They are Java processes on this computer with no window.
 
-- **Nodes** (**Desktop nodes** in Core): *Start All Nodes*, *Stop All Nodes*, the node counter and *+ Add Node*.
-- **Web UIs** (Classic only): *Open All* opens the web UI of every running node.
-- **View**: *Clear All Logs* and *Toggle View*.
-- **Danger zone**: *Kill All Processes* and *Delete All Data*.
-- The gear button opens the **Global Start Configuration**.
-
-In **Classic** the tab then shows the global system log and one card per node (start command preview, Start/Stop, logs, command box, per-node network and delete-data buttons).
-
-In **Core** the tab is organised by node type, below the global system log:
-
-1. **Network**: one table with every running node (desktop and Android), its block and peer count, and an *in sync* / *diverging* indicator.
-2. **Android nodes**: the *Open All Emulators* button and one row per AVD with its Minima node controls (see [Android nodes](#android-nodes-emulators-and-coretestnode)).
-3. **Desktop nodes**: the node cards (Java processes on this computer, no window).
-
-> **Start All Nodes never launches emulators**, and *Open All Emulators* never starts nodes. In Core mode they are independent actions: the first starts the Core node processes on your computer, the second boots Android emulators.
+> The *Nodes* buttons of each section act only on that kind of node: *Start All Nodes* in *Headless nodes* never launches an emulator, and *Open All Emulators* never starts a node. Use *Start Everything* for both.
 
 ## Classic mode (MDS)
 
@@ -220,8 +212,8 @@ Connectivity (measured on this setup): an emulator reaches the desktop nodes thr
 
 Notes:
 - The emulator runs as the real desktop user (`SUDO_USER`, so start the manager with `sudo`), detached: stopping or restarting the Node Manager does not close it. The desktop **Java node processes, in contrast, are children of the server and stop with it**. Without `SUDO_USER` the launch is refused.
-- Only the AVDs that exist are launched: to run two emulators you need two AVDs. Create them in Android Studio, with enough internal storage (a full data partition makes the node app fail to install).
-- Endpoints: `GET /api/emulator/avds`, `POST /api/emulator/launch` with `{"avd":"<name>"}`, `POST /api/emulator/launch-all`; for the node: `GET /api/android-node/status?avd=`, `POST /api/android-node/{install,start,stop,wipe,cmd}`. AVD names must exactly match an AVD reported by `emulator -list-avds`, serials come from `adb devices`, and processes are spawned with argument arrays, never a shell string.
+- Only the AVDs that exist are launched: to run two emulators you need two AVDs. *+ New AVD* (or `POST /api/emulator/create` with `{"name":"...","dataSize":"8G"}`) clones the config of the first existing AVD, so no `avdmanager` is needed; the system image must already be installed. Mind the internal storage: a full data partition makes the node app fail to install.
+- Endpoints: `GET /api/emulator/avds`, `POST /api/emulator/launch` with `{"avd":"<name>"}`, `POST /api/emulator/launch-all`, `POST /api/emulator/create`; for the node: `GET /api/android-node/status?avd=`, `POST /api/android-node/{install,start,stop,wipe,cmd}`. AVD names must exactly match an AVD reported by `emulator -list-avds`, serials come from `adb devices`, and processes are spawned with argument arrays, never a shell string.
 
 #### Saved sessions
 
@@ -231,13 +223,25 @@ Notes:
 - **Snapshots (sessions)** drawer: list, save, load and delete for a running AVD (`adb emu avd snapshot ...`). A session is just an emulator snapshot, so the Core wallet, chain and app data of one day can be resumed another day. Restoring a snapshot of a node that already signed transactions reuses key state: use it only on test chains. Snapshots restore the disk, so reinstall the node app after a restore if it is missing.
 - **Port forwards** drawer (running AVDs): list/add/remove `adb forward tcp:<host> tcp:<guest>`; host port 20000-60000 (suggested 21000 + AVD index), guest port 1024-65535 (default 11001, the official Core app).
 
+### Test scenarios
+
+The *Test scenarios* panel (Nodes tab, Core) runs scripts against the running harness and streams their output (Run, Stop, *show output*; the result is PASSED when the exit code is 0). Scenarios come from `testScenarios` in `config.json`:
+
+```json
+"testScenarios": [
+  { "id": "my-flow", "name": "My flow", "description": "optional", "cmd": ["python3", "-I", "/path/script.py", "--rpc", "http://10.0.0.11:9005"], "cwd": "/optional/dir" }
+]
+```
+
+If the list is empty and `../MinimaAds` is a sibling checkout, two scenarios for its `docs/testing/tools/escrow_flow.py` are offered: the escrow/channel lifecycle on node 1 alone, and with the viewer on node 2 (both nodes must be running and synced; 29/29 checks pass on a private chain). The command line comes only from `config.json`, is spawned without a shell and runs as the desktop user (`SUDO_USER`). API: `GET /api/scenarios`, `POST /api/scenarios/run` and `/stop` with `{"id":"..."}`, `GET /api/scenarios/:id/output`.
+
 ### Android tools (ADB)
 
 The *Android tools* tab (Core only) holds the ADB block: target device, APK install/uninstall, file push and its operations log.
 
-Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator is run): `node test/emulator.test.js` and `node test/android-node.test.js`.
+Limits: the AVDs must already exist (`avdmanager` is not used). Snapshot names match `[A-Za-z0-9._-]{1,64}` (and must exist for load/delete), and operations are serialized per AVD. Mocked tests (no adb/emulator/process is run): `node test/emulator.test.js`, `node test/android-node.test.js` and `node test/scenarios.test.js`.
 
-**Security:** the Node Manager listens on all interfaces without authentication, so anyone who can reach port 3000 can launch emulators and send commands to Android nodes as your user. Use it only on a trusted network.
+**Security:** the Node Manager listens on all interfaces without authentication, so anyone who can reach port 3000 can launch emulators, send commands to Android nodes and run the configured scenarios as your user. Use it only on a trusted network. Requests and WebSocket handshakes that carry an `Origin` header for a different host than the one they were sent to are refused, so a web page on another site cannot drive the manager from your browser.
 
 ## HTTP API (Debug & Automation)
 
@@ -314,10 +318,12 @@ MinimaNodeManager/
 ├── nodemanager            # Launcher script
 ├── lib/
 │   ├── emulator.js        # Android emulator launcher/sessions (Core)
-│   └── android-node.js    # Minima node inside an AVD, via CoreTestNode (Core)
+│   ├── android-node.js    # Minima node inside an AVD, via CoreTestNode (Core)
+│   └── scenarios.js       # Test scenarios runner (Core)
 ├── public/                # Frontend assets
 │   ├── index.html         # Main UI
-│   ├── app.js             # Frontend logic
+│   ├── app.js             # Frontend logic (nodes, tabs, Classic)
+│   ├── android.js         # Android nodes, network table, Start/Stop Everything, scenarios (Core)
 │   ├── style.css          # Minima-themed styles
 │   └── logo.jpeg          # Minima logo
 ├── scripts/               # Shell scripts for node management
@@ -354,10 +360,7 @@ The application requires sudo privileges to manage network namespaces. Make sure
 *Start All Nodes* starts the Core node processes of your computer. Emulators are launched with *Open All Emulators* (or each AVD's Start button in the *Android nodes* section), and you only get as many emulators as AVDs you have created.
 
 ### Port conflicts
-If port 3000 is already in use, you can change it in `server.js`:
-```javascript
-const PORT = process.env.PORT || 3000;
-```
+If port 3000 is already in use, start the server with another one: `sudo PORT=3001 node server.js` (the `nodemanager` launcher runs `sudo node server.js`, so use `sudo env PORT=3001 node server.js`).
 
 ## Development
 
@@ -366,6 +369,7 @@ To contribute or modify the application:
 1. **Frontend changes**: Edit files in `public/` - changes are served immediately
 2. **Backend changes**: Edit `server.js` and restart the server
 3. **Scripts**: Modify shell scripts in `scripts/` as needed
+4. **Without sudo** (UI and API work, nodes cannot start because there are no network namespaces): `NODEMANAGER_DEV_NONROOT=1 NODEMANAGER_NO_BROWSER=1 PORT=3001 node server.js`
 
 ## License
 

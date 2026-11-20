@@ -51,7 +51,25 @@
 
             <!-- Tab Content: Nodes -->
             <div id="tab-nodes" class="tab-content show active">
-                <div class="tab-toolbar">
+                <!-- Core: actions on everything (both node types) -->
+                <div class="tab-toolbar core-tab" id="global-bar">
+                    <div class="tb-group">
+                        <span class="tb-label">Everything</span>
+                        <div class="tb-row">
+                            <button id="start-everything-btn" class="btn btn-primary"
+                                title="Starts the headless nodes (seed first), then the emulators, installs the node app where missing and joins every Android node to the seed">Start Everything</button>
+                            <button id="stop-everything-btn" class="btn btn-danger"
+                                title="Stops the Android nodes and the headless nodes">Stop Everything</button>
+                            <label class="checkbox-container" style="font-size: 0.8rem;"><input type="checkbox" id="stop-emulators-chk"> also close emulators</label>
+                        </div>
+                    </div>
+                    <div class="tb-group">
+                        <span class="tb-label">View</span>
+                        <div class="tb-row"><button id="clear-logs-global-btn" class="btn btn-clear">Clear All Logs</button></div>
+                    </div>
+                    <span id="everything-status" class="net-chip" style="align-self: center;"></span>
+                </div>
+                <div class="tab-toolbar" id="nodes-toolbar">
                     <div class="tb-group">
                         <span class="tb-label" id="nodes-group-label">Nodes</span>
                         <div class="tb-row">
@@ -75,7 +93,7 @@
                     <div class="tb-group">
                         <span class="tb-label">View</span>
                         <div class="tb-row">
-                            <button id="clear-all-logs-btn" class="btn btn-clear">Clear All Logs</button>
+                            <button id="clear-all-logs-btn" class="btn btn-clear classic-only">Clear All Logs</button>
                             <button id="toggle-view-btn" class="btn btn-secondary">Toggle View</button>
                         </div>
                     </div>
@@ -108,18 +126,47 @@
                             <button id="refresh-network-btn" class="btn btn-small btn-neutral">🔄 Refresh</button>
                         </div>
                         <table class="net-table">
-                            <thead><tr><th>Node</th><th>Type</th><th>Where</th><th>Block</th><th>Peers</th></tr></thead>
+                            <thead><tr><th>Node</th><th>Type</th><th>Where</th><th>Block</th><th>Tip hash</th><th>Peers</th></tr></thead>
                             <tbody id="network-rows"></tbody>
                         </table>
-                        <small class="net-note">Android nodes join the chain by connecting to the desktop seed (node 1); desktop nodes cannot dial into an emulator.</small>
+                        <small class="net-note">Click a row to see its peers. Android nodes join the chain by connecting to the headless seed (node 1); headless nodes cannot dial into an emulator. Same block with a different tip hash means the chain has forked.</small>
                     </section>
 
                     <!-- Core: Android nodes (emulator + CoreTestNode) -->
                     <section class="node-section core-tab" id="android-nodes-section">
                         <div class="node-section-header">
                             <h3>Android nodes</h3>
-                            <button id="open-all-emulators-btn" class="btn btn-blue btn-small"
-                                title="Open all Android emulators (AVDs) that are not running yet. Does not start nodes.">Open All Emulators</button>
+                        </div>
+                        <div class="tab-toolbar android-toolbar">
+                            <div class="tb-group">
+                                <span class="tb-label">Emulators</span>
+                                <div class="tb-row">
+                                    <button id="open-all-emulators-btn" class="btn btn-blue"
+                                        title="Open all Android emulators (AVDs) that are not running yet. Does not start nodes.">Open All Emulators</button>
+                                    <button id="stop-all-emulators-btn" class="btn btn-danger" title="Close every running emulator">Stop All Emulators</button>
+                                    <button id="new-avd-btn" class="btn btn-small btn-add" title="Create an AVD by cloning an existing one">+ New AVD</button>
+                                </div>
+                            </div>
+                            <div class="tb-group">
+                                <span class="tb-label">Minima nodes</span>
+                                <div class="tb-row">
+                                    <button id="start-android-nodes-btn" class="btn btn-primary" title="On every running emulator: install the node app if missing and join the desktop seed">Start All Nodes</button>
+                                    <button id="stop-android-nodes-btn" class="btn btn-danger" title="Stop the Minima node on every running emulator (chain data is kept)">Stop All Nodes</button>
+                                </div>
+                            </div>
+                            <div class="tb-group tb-danger">
+                                <span class="tb-label">Danger zone</span>
+                                <div class="tb-row">
+                                    <button id="wipe-android-nodes-btn" class="btn btn-danger" title="Stop the node and delete its chain on every running emulator">Wipe All Node Data</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="new-avd-form" class="new-avd-form" style="display: none;">
+                            <input type="text" id="new-avd-name" class="command-input" placeholder="AVD name (e.g. Minima_Node_3)" style="width: 220px;">
+                            <input type="text" id="new-avd-size" class="command-input" value="8G" title="Internal storage" style="width: 70px;">
+                            <button id="new-avd-create-btn" class="btn btn-small btn-primary">Create</button>
+                            <button id="new-avd-cancel-btn" class="btn btn-small btn-neutral">Cancel</button>
+                            <small>Clones the first existing AVD (same system image).</small>
                         </div>
                         <details class="inline-log-container" id="android-devices-panel" open>
                             <summary class="log-header">Emulators (AVDs) and their Minima node</summary>
@@ -132,7 +179,19 @@
                         </details>
                     </section>
 
-                    <div class="node-section-header core-tab"><h3>Desktop nodes</h3><small>Java processes on this computer, no window</small></div>
+                    <!-- Core: test scenarios against the harness -->
+                    <section class="node-section core-tab" id="scenarios-section">
+                        <details class="inline-log-container" id="scenarios-details">
+                            <summary class="log-header">Test scenarios</summary>
+                            <div style="padding: 8px;">
+                                <div id="scenario-list"></div>
+                                <pre id="scenario-output" class="scenario-output" style="display: none;"></pre>
+                            </div>
+                        </details>
+                    </section>
+
+                    <div class="node-section-header core-tab"><h3>Headless nodes</h3><small>Java processes on this computer, no window</small></div>
+                    <div id="headless-toolbar-slot"></div>
                     <div class="grid list-view">
                         <!-- Node Templates Generated via JS to avoid duplication -->
                     </div>
@@ -718,6 +777,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="global-log-helper.js"></script>
     <script src="app.js"></script>
+    <script src="android.js"></script>
 </body>
 
 </html>
