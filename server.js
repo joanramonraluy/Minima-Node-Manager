@@ -72,7 +72,9 @@ let globalConfig = {
     coreLibsPath: '',
     coreDbPassword: 'minima',
     androidSdkPath: '', // derived from adbPath when empty
-    emulatorArgs: ['-gpu', 'host'] // -gpu host is required on some machines (SwiftShader segfaults)
+    emulatorArgs: ['-gpu', 'host'], // -gpu host is required on some machines (SwiftShader segfaults)
+    coreTestNodeApk: '', // CoreTestNode.apk (Android node); auto-detected in ./core/ or ../MinimaAds/docs/testing/tools/core-test-node/
+    androidSeedHost: '10.0.0.11:9001' // desktop seed that Android nodes connect to
 };
 
 // Load Config from File
@@ -138,7 +140,10 @@ app.use(express.json());
 
 // Serve static files from 'public' directory
 // Android emulator list/launch (AVDs; works in Classic and Core modes)
-app.use('/api/emulator', require('./lib/emulator')({ getConfig: () => globalConfig, getAdbEnv, log: (m) => io.emit('global-log', m + '\n') }));
+const emulatorRouter = require('./lib/emulator')({ getConfig: () => globalConfig, getAdbEnv, log: (m) => io.emit('global-log', m + '\n') });
+app.use('/api/emulator', emulatorRouter);
+// Minima Core node inside a running AVD (CoreTestNode); shares the AVD checks/locks of the emulator router
+app.use('/api/android-node', require('./lib/android-node')({ getConfig: () => globalConfig, log: (m) => io.emit('global-log', m + '\n'), helpers: emulatorRouter._helpers }));
 
 app.use(express.static('public'));
 
