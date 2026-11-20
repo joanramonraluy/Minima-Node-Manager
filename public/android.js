@@ -240,7 +240,7 @@ async function collectNetworkRows() {
     try {
         const data = await fetch('/api/emulator/avds').then(r => r.json());
         await Promise.all((data.avds || []).filter(a => a.running).map(async a => {
-            const row = { name: a.name, type: 'android', where: `${a.serial} (port 12001)`, block: null, hash: null, peers: null, order: 100,
+            const row = { name: a.name, type: 'android', where: `${a.serial}`, block: null, hash: null, peers: null, order: 100,
                 peersLoader: async () => { const r = await androidNodeApi('POST', '/cmd', { avd: a.name, command: 'network' }); return r.ok ? peerLines(((r.j.reply || {}).response || {}).connections) : [r.j.error || 'error']; } };
             try {
                 const st = await fetch('/api/android-node/status?avd=' + encodeURIComponent(a.name)).then(r => r.json());
@@ -345,9 +345,9 @@ async function runningAvds() {
 const gl = (tag, msg) => addToGlobalLog(`[${tag}] ${msg}`);
 
 // Installs the node app if missing and (re)starts the node joined to the seed. Returns true when started.
-async function startAndroidNode(avdName, tag = 'AndroidNode') {
+async function startAndroidNode(avdName, tag = 'AndroidNode', force = false) {
     let st = (await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(avdName))).j;
-    if (st.nodeUp && st.connected > 0) { gl(tag, `${avdName}: node already up (block ${st.block}, ${st.connected} peer(s)).`); return true; }
+    if (!force && st.nodeUp && st.connected > 0) { gl(tag, `${avdName}: node already up (block ${st.block}, ${st.connected} peer(s)).`); return true; }
     if (st.nodeUp) gl(tag, `${avdName}: node is up but has no peers (the seed probably restarted): restarting it to rejoin the seed.`);
     if (!st.installed) {
         if (!st.apk) { gl(tag, `${avdName}: CoreTestNode.apk not found (set coreTestNodeApk in config.json).`); return false; }
@@ -439,20 +439,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStatus(`starting node on ${name}...`);
                 if (!(await startAndroidNode(name, tag))) failed++;
             }
-            // 4. A fresh Android node can connect to the seed and still stay at block 0 (observed, cause unknown). Say so instead of "all started".
+            // 4. Check that every Android node got the chain. The seed sends it once per host:port, and the
+            //    start picks a new random port, so a node at block 0 is retried once (new port) before warning.
             setStatus('checking sync...');
-            const stuck = [];
+            const atBlock0 = async name => {
+                const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
+                return r.ok && r.j.nodeUp && !(r.j.block > 0);
+            };
+            const syncWait = name => waitFor(async () => !(await atBlock0(name)), 60000, 5000);
             for (const name of wanted) {
-                const synced = await waitFor(async () => {
-                    const r = await androidNodeApi('GET', '/status?avd=' + encodeURIComponent(name));
-                    if (!r.ok || !r.j.nodeUp) return true; // not started (already reported above)
-                    return r.j.block > 0;
-                }, 90000, 5000);
-                if (!synced) stuck.push(name);
-            }
-            if (stuck.length) {
-                gl(tag, `${stuck.join(', ')}: connected but still at block 0 after 90 s. Observed (cause unknown): stopping and starting headless node 1 (the seed) while the Android node is connected made it download the chain in one test. See the README troubleshooting entry.`);
-                failed += stuck.length;
+                if (await syncWait(name)) continue;
+                gl(tag, `${name}: still at block 0 after 60 s: restarting its node on a new port.`);
+                await startAndroidNode(name, tag, true);
+                if (await syncWait(name)) continue;
+                gl(tag, `${name}: still at block 0. See the README troubleshooting entry (the seed sends the chain once per address).`);
+                failed++;
             }
             setStatus(failed ? `started, ${failed} Android node(s) need attention` : 'all started', failed ? 'bad' : 'ok');
             gl(tag, failed ? `Done with ${failed} failure(s): see the lines above.` : 'Done. See the Network table for the sync state.');

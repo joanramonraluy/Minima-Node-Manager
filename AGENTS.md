@@ -25,5 +25,9 @@ Guidance for coding agents working on this repo. For what the project is and how
 - Clicking Start on an AVD boots a real emulator; the panel's Stop button shuts it down. Desktop Java nodes are children of the server (they stop when it restarts); emulators are detached and survive.
 - Backend changes (`server.js`, `lib/`) need a server restart, which only the user can do (sudo).
 
+## Minima quirks that shaped the code
+- A Minima node sends the initial block download (the chain) only once per `host:port` of a peer until it restarts (`NIOMessage.mHaveSentIBDRecently`). All emulators reach the seed as `10.0.0.1:<-port>`, so Android nodes must use a different `-port` per node and per start (`lib/android-node.js` picks a random one). Same port = connected, 1 peer, stuck at block 0.
+- Stopping a node that has just synced can lose blocks it had not saved; avoid pointless restarts of Android nodes.
+
 ## Security
 - The manager and its RPC listen on all interfaces without authentication: this is a test harness for an isolated machine. Don't add features that widen that exposure, and keep spawning processes with argument arrays, never shell strings.

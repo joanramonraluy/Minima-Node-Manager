@@ -35,7 +35,8 @@ async function run(cmd, args) {
 const logs = [];
 const cfg = { androidSdkPath: path.join(tmp, 'sdk'), adbPath: 'adb', coreTestNodeApk: apk, androidNodePollMs: 5, androidNodeStatusWaitMs: 200, emulatorStopPollMs: 5 };
 const emu = require('../lib/emulator')({ getConfig: () => cfg, getAdbEnv: () => process.env, log: m => logs.push(m), run, avdRoot: () => tmp, spawnProc: () => ({ pid: 1, on() { }, unref() { } }) });
-const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => logs.push(m), helpers: emu._helpers });
+let nextPort = 12001;
+const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => logs.push(m), helpers: emu._helpers, pickPort: () => nextPort++ });
 
 (async () => {
     const app = express(); app.use('/api/android-node', router);
@@ -61,6 +62,7 @@ const router = require('../lib/android-node')({ getConfig: () => cfg, log: m => 
 
     r = await post('/start', { avd: 'Phone_A' }); assert.equal(r.s, 200);
     assert.equal(r.j.params, '-test -nop2p -connect 10.0.0.11:9001 -port 12001'); ok('default start joins the desktop seed');
+    r = await post('/start', { avd: 'Phone_A' }); assert.equal(r.j.params, '-test -nop2p -connect 10.0.0.11:9001 -port 12002'); ok('every start picks a different port (the seed sends the chain once per host:port)');
     assert.ok(st.calls.some(c => /start-foreground-service .* --es params '-test -nop2p -connect 10\.0\.0\.11:9001 -port 12001'$/.test(c))); ok('params travel in one quoted argument');
     r = await post('/start', { avd: 'Phone_A', mode: 'solo', port: 13001 }); assert.equal(r.j.params, '-solo -port 13001'); ok('solo mode');
     r = await post('/start', { avd: 'Phone_A', mode: 'x' }); assert.equal(r.s, 400); ok('bad mode 400');

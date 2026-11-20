@@ -198,7 +198,7 @@ The *Android nodes* section of the Nodes tab lists the AVDs from `emulator -list
 
 - **Emulator**: *Start* opens the real emulator window on your desktop (if it is already running or starting, no second copy is started). *Open All Emulators* does the same for every AVD that is not running yet, one at a time with a short pause (`emulatorLaunchPauseMs`, default 3000 ms). Progress goes to the global log and the emulator output to `/tmp/emulator-<avd>.log`.
 - **Minima node** (running AVDs): status line (block, peers, port), *Install node app*, *Start node*, *Stop node*, *Wipe data* and a command box.
-  - *Start node* offers **join desktop seed** (`-test -nop2p -connect 10.0.0.11:9001 -port 12001`: the Android node syncs the chain of desktop node 1) or **own chain** (`-solo -port 12001`).
+  - *Start node* offers **join desktop seed** (`-test -nop2p -connect 10.0.0.11:9001 -port <random 12001-12999>`: the Android node syncs the chain of desktop node 1) or **own chain** (`-solo -port 12001`).
   - *Stop node* force-stops the app; the chain data is kept. *Wipe data* clears it.
   - The command box sends a Minima command to the node (printable ASCII, up to 300 chars) and shows the JSON reply.
 - **Snapshots (sessions)** and **Port forwards** drawers, as described below.
@@ -352,7 +352,9 @@ export PATH="$HOME/.local/bin:$PATH"
 The application requires sudo privileges to manage network namespaces. Make sure you're running it with sudo or that the `nodemanager` script is using sudo correctly.
 
 ### An Android node is connected but stays at block 0
-Observed on this setup (not understood): a fresh Android node (new install or *Wipe data*) that connects to a seed that is already running can stay at block 0 with 1 peer, for minutes. Restarting the Android node does not help, and if it had just synced it can lose what was not yet saved. In one test, stopping and starting the **seed (headless node 1)** while two Android nodes were connected made one of them download the chain within a minute; the other stayed at block 0. In the very first test the node synced within 40 s of its first start. *Start Everything* reports a node still at block 0 after 90 s ("need attention") instead of "all started". If it happens, restart the seed with the Android nodes connected and check the *Network* table; the cause inside Minima Core is not known.
+Cause (found in the Minima source, `NIOMessage`, and confirmed by a test): a node keeps an in-memory set of `host:port` addresses it has already sent the initial block download (the chain) to, and does not send it again until it restarts. Every emulator reaches the seed through the host bridge, so the seed sees all Android nodes as `10.0.0.1:<their -port>`. With the same port, only the first node (or a node before it was wiped) ever gets the chain; the others connect, show 1 peer and stay at block 0.
+
+Fix in the manager: *Start node* now picks a **random port (12001-12999) on every start**, so each start looks like a new peer. *Start Everything* checks that each Android node leaves block 0 and, if not, restarts it once on a new port before warning. If you start nodes by hand with `-port`, use a different port per node and per start (`POST /api/android-node/start` accepts `port`). Restarting the seed also clears its list. Restarting an Android node that keeps its data does not need the chain again, but a restart right after it synced can lose blocks it had not saved yet.
 
 ### Nodes won't start
 1. Classic: check that Minima is installed (`which minima`). Core: check `coreJarPath` / `coreLibsPath` and that Java is installed.
