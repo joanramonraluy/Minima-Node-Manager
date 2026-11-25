@@ -20,11 +20,13 @@ const router = require('../lib/nodes-http')({
 
     let r = await get('/'); assert.deepEqual(r.j, { mode: 'core', running: [] }); ok('list: nothing running');
     r = await post('/1/start'); assert.equal(r.s, 200); assert.equal(r.j.status, 'starting');
-    assert.deepEqual(calls.pop(), ['start', 1, { clean: false }]); ok('start one node (no body, never -clean by default)');
+    assert.deepEqual(calls.pop(), ['start', 1, { clean: false, allowGenMessage: false }]); ok('start one node (no body, never -clean by default)');
     r = await post('/1/start'); assert.equal(r.j.status, 'already running'); assert.equal(calls.length, 0); ok('starting a running node does nothing');
     r = await get('/'); assert.deepEqual(r.j.running, [1]); ok('list shows running nodes');
-    r = await post('/3/start', { clean: true }); assert.deepEqual(calls.pop(), ['start', 3, { clean: true }]); ok('clean must be requested explicitly');
+    r = await post('/3/start', { clean: true }); assert.deepEqual(calls.pop(), ['start', 3, { clean: true, allowGenMessage: false }]); ok('clean must be requested explicitly');
     r = await post('/4/start', { clean: 'yes' }); assert.equal(r.s, 400); ok('clean must be a boolean');
+    r = await post('/5/start', { allowGenMessage: true }); assert.deepEqual(calls.pop(), ['start', 5, { clean: false, allowGenMessage: true }]); ok('allowGenMessage must be requested explicitly and never implies clean');
+    r = await post('/6/start', { allowGenMessage: 'yes' }); assert.equal(r.s, 400); ok('allowGenMessage must be a boolean');
     r = await post('/0/start'); assert.equal(r.s, 400); r = await post('/27/start'); assert.equal(r.s, 400); r = await post('/x;y/start'); assert.equal(r.s, 400); ok('invalid ids refused');
     r = await post('/1/stop'); assert.equal(r.s, 200); assert.deepEqual(calls.pop(), ['stop', 1]); ok('stop one node');
     r = await post('/stop-all'); assert.equal(r.s, 200); assert.deepEqual(calls.pop(), ['stopAll']); ok('stop all');

@@ -237,6 +237,7 @@ function startNode(id, options = {}) {
         const wantsClean = options.clean === true || raw.includes('-clean');
         args.push(String(id));
         if (wantsClean) args.push('-clean');
+        if (options.allowGenMessage === true) args.push('-allowgenmessage');
         if (globalConfig.ramLimit) args.push('-ram', globalConfig.ramLimit);
         if (globalConfig.cpuLimit) args.push('-cpus', String(globalConfig.cpuLimit));
         fullCommandStr = `${cmd} ${args.join(' ')}`;

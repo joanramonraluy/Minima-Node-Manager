@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start a Minima CORE node (org.minima.Minima, 1.1.x) inside its network namespace.
-# Usage: start_core_node.sh <ID> [-clean] [-ram 256m] [-cpus 1]
+# Usage: start_core_node.sh <ID> [-clean] [-allowgenmessage] [-ram 256m] [-cpus 1]
 # Env (set by server.js from config.json):
 #   CORE_JAR         path to the Core minima.jar
 #   CORE_LIBS        directory containing bcprov/bcpkix/bcutil/h2 jars
@@ -71,11 +71,13 @@ PORT=9001   # every node has its own IP; RPC will be PORT+4 = 9005
 mkdir -p "$DATA_NAME"
 
 clean_flag=""
+genmsg_flag=""
 ram_limit=""
 cpu_limit=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     -clean) clean_flag="-clean"; shift ;;
+    -allowgenmessage) genmsg_flag="-allowgenmessage"; shift ;;   # lets this node accept the `message` command from a peer
     -ram)   ram_limit="$2"; shift 2 ;;
     -cpus)  cpu_limit="$2"; shift 2 ;;
     *)      shift ;;   # MDS/Classic flags are meaningless for Core: ignore
@@ -100,4 +102,5 @@ exec ip netns exec $NS java $xmx_flag $cpu_flag -cp "$CP" org.minima.Minima \
   -host ${IP%/*} \
   -rpccrlf \
   $clean_flag \
+  $genmsg_flag \
   $role_flags | tee "$DATA_NAME/startup.log"

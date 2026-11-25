@@ -56,6 +56,7 @@ M=http://localhost:3000
 curl -s $M/api/nodes                                                    # {"mode":"core","running":[1,2]}
 curl -s -X POST $M/api/nodes/start-all -H 'Content-Type: application/json' -d '{"count":2}'   # nodes 1..count, seed first (default 2)
 curl -s -X POST $M/api/nodes/1/start                                    # one node; add {"clean":true} ONLY to delete its chain and wallet
+curl -s -X POST -H 'Content-Type: application/json' -d '{"allowGenMessage":true}' $M/api/nodes/2/start   # starts the node with -allowgenmessage (receives the `message` command; without it the node drops the sender's connection)
 curl -s -X POST $M/api/nodes/2/stop
 curl -s -X POST $M/api/nodes/stop-all
 
